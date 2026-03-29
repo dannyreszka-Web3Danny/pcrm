@@ -10,10 +10,8 @@ function fmtK(v,cur){
 }
 
 function encodeRfc822(to,subject,body){
-  var lines=["To: "+to,"Subject: "+subject,"Content-Type: text/plain; charset=UTF-8","MIME-Version: 1.0","",""].concat(body.split("\
-"));
-  var raw=lines.join("\r\
-");
+  var lines=["To: "+to,"Subject: "+subject,"Content-Type: text/plain; charset=UTF-8","MIME-Version: 1.0","",""].concat(body.split("\n"));
+  var raw=lines.join("\r\n");
   try{return btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}catch(e){return btoa(raw).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
 }
 /* ── GOOGLE DRIVE SYNC ──────────────────────────────────── */
