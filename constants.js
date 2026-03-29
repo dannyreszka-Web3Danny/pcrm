@@ -85,14 +85,26 @@ const DEF_STRATEGY = {
 };
 const DEF_SEQUENCES = {
   aiInstructions:"Write professional but warm emails. Be concise (under 120 words for cold, under 80 for follow-ups). Focus on value and market context, not features. Never be pushy.",
-  steps:[
-    {id:"s1",name:"Cold Intro",channel:"email",dayOffset:0,subject:"{{company}} \u2014 a thought",body:"Hi {{first_name}},\n\nI wanted to reach out as I believe we might have something relevant for {{company}}.\n\nWould you be open to a quick 15-min call this week?\n\nBest,\n{{my_name}}"},
-    {id:"s2",name:"Follow-up 1",channel:"email",dayOffset:3,subject:"Re: {{company}} \u2014 quick follow-up",body:"Hi {{first_name}},\n\nJust following up on my note from a few days ago. Happy to share a quick case study if useful.\n\nBest,\n{{my_name}}"},
-    {id:"s3",name:"Value Touch",channel:"linkedin",dayOffset:7,subject:"Connecting",body:"Hi {{first_name}}, I\u2019ve been following {{company}}\u2019s work. I\u2019d love to connect \u2014 we\u2019ve been helping similar teams with {{value_proposition}}."},
-    {id:"s4",name:"Demo Ask",channel:"email",dayOffset:14,subject:"15 min for {{company}}?",body:"Hi {{first_name}},\n\nWould a 15-min call next week make sense? I\u2019ll share one specific idea relevant to {{company}}.\n\nBest,\n{{my_name}}"},
-    {id:"s5",name:"Breakup",channel:"email",dayOffset:30,subject:"Closing the loop \u2014 {{company}}",body:"Hi {{first_name}},\n\nI\u2019ll keep this short \u2014 I won\u2019t reach out again unless it makes sense.\n\nWishing you all the best.\n\n{{my_name}}"}
-  ],
-  leadProgress:{}
+  sequences:[{
+    id:"seq_wallets",
+    name:"Wallets campaign",
+    steps:[
+      {id:"s1",name:"Cold Intro",channel:"email",dayOffset:0,subject:"{{company}} \u2014 a thought",body:"Hi {{first_name}},\n\nI wanted to reach out as I believe we might have something relevant for {{company}}.\n\nWould you be open to a quick 15-min call this week?\n\nBest,\n{{my_name}}",enabled:true},
+      {id:"s2",name:"Follow-up 1",channel:"email",dayOffset:3,subject:"Re: {{company}} \u2014 quick follow-up",body:"Hi {{first_name}},\n\nJust following up on my note from a few days ago. Happy to share a quick case study if useful.\n\nBest,\n{{my_name}}",enabled:true},
+      {id:"s3",name:"Value Touch",channel:"linkedin",dayOffset:7,subject:"",body:"Hi {{first_name}}, I've been following {{company}}'s work. I'd love to connect \u2014 we've been helping similar teams with {{value_proposition}}.",enabled:true},
+      {id:"s4",name:"Demo Ask",channel:"email",dayOffset:14,subject:"15 min for {{company}}?",body:"Hi {{first_name}},\n\nWould a 15-min call next week make sense? I'll share one specific idea relevant to {{company}}.\n\nBest,\n{{my_name}}",enabled:true},
+      {id:"s5",name:"Breakup",channel:"email",dayOffset:30,subject:"Closing the loop \u2014 {{company}}",body:"Hi {{first_name}},\n\nI'll keep this short \u2014 I won't reach out again unless it makes sense.\n\nWishing you all the best.\n\n{{my_name}}",enabled:true}
+    ],
+    leadProgress:{
+      "lead_web3danny":{currentStep:0,history:[],sentCount:0,replyCount:0,bounced:false,optedOut:false,nextUnlockAt:null,addedAt:new Date(Date.now()-7*86400000).toISOString()},
+      "test_vaultchain_001":{currentStep:1,history:[{stepIdx:0,sentAt:new Date(Date.now()-2*86400000).toISOString(),to:"marcus@vaultchain.io"}],sentCount:1,replyCount:0,bounced:false,optedOut:false,nextUnlockAt:new Date(Date.now()+3*86400000).toISOString(),addedAt:new Date(Date.now()-7*86400000).toISOString()},
+      "cb_c1":{currentStep:2,history:[{stepIdx:0,sentAt:new Date(Date.now()-7*86400000).toISOString(),to:"sarah@cryptobase.io"},{stepIdx:1,sentAt:new Date(Date.now()-2*86400000).toISOString(),to:"sarah@cryptobase.io"}],sentCount:2,replyCount:1,bounced:false,optedOut:false,nextUnlockAt:new Date(Date.now()+3*86400000).toISOString(),addedAt:new Date(Date.now()-7*86400000).toISOString()},
+      "cb_c2":{currentStep:2,history:[{stepIdx:0,sentAt:new Date(Date.now()-7*86400000).toISOString(),to:"james@cryptobase.io"},{stepIdx:1,sentAt:new Date(Date.now()-2*86400000).toISOString(),to:"james@cryptobase.io"}],sentCount:2,replyCount:0,bounced:false,optedOut:false,nextUnlockAt:new Date(Date.now()+7*86400000).toISOString(),addedAt:new Date(Date.now()-7*86400000).toISOString()},
+      "cb_c3":{currentStep:3,history:[{stepIdx:0,sentAt:new Date(Date.now()-7*86400000).toISOString(),to:"mia@cryptobase.io"},{stepIdx:1,sentAt:new Date(Date.now()-2*86400000).toISOString(),to:"mia@cryptobase.io"},{stepIdx:2,sentAt:new Date(Date.now()-86400000).toISOString(),to:"mia@cryptobase.io"}],sentCount:3,replyCount:0,bounced:false,optedOut:false,nextUnlockAt:new Date(Date.now()+7*86400000).toISOString(),addedAt:new Date(Date.now()-7*86400000).toISOString()},
+      "cb_c4":{currentStep:3,history:[{stepIdx:0,sentAt:new Date(Date.now()-7*86400000).toISOString(),to:"leo@cryptobase.io"},{stepIdx:1,sentAt:new Date(Date.now()-2*86400000).toISOString(),to:"leo@cryptobase.io"},{stepIdx:2,sentAt:new Date(Date.now()-86400000).toISOString(),to:"leo@cryptobase.io"}],sentCount:3,replyCount:1,bounced:false,optedOut:false,nextUnlockAt:new Date(Date.now()+3*86400000).toISOString(),addedAt:new Date(Date.now()-7*86400000).toISOString()},
+      "cb_c5":{currentStep:4,history:[{stepIdx:0,sentAt:new Date(Date.now()-7*86400000).toISOString(),to:"nina@cryptobase.io"},{stepIdx:1,sentAt:new Date(Date.now()-2*86400000).toISOString(),to:"nina@cryptobase.io"},{stepIdx:2,sentAt:new Date(Date.now()-86400000).toISOString(),to:"nina@cryptobase.io"},{stepIdx:3,sentAt:new Date(Date.now()-86400000).toISOString(),to:"nina@cryptobase.io"}],sentCount:4,replyCount:0,bounced:false,optedOut:true,nextUnlockAt:null,addedAt:new Date(Date.now()-7*86400000).toISOString()}
+    }
+  }]
 };
 const DEF_CAMPAIGNS = [
   {id:"camp_default",name:"Cold Outreach",createdAt:new Date().toISOString(),steps:[
