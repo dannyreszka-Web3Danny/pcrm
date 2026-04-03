@@ -4,9 +4,9 @@ html,body,#root{height:100%}
 body{background:#0F0F0F;color:#E8E8E8;overflow:hidden;font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 input[type=range]{cursor:pointer}
 input[type=date],input[type=time]{color-scheme:dark}
-::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+::-webkit-scrollbar-thumb{background:#555;border-radius:4px}
 select option{background:#1A1A1A;color:#E8E8E8}
 textarea{font-family:'Barlow',sans-serif}
 a{color:#60B4FF;text-decoration:none}
