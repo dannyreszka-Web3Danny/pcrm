@@ -223,6 +223,8 @@ function activityDots(lead){
 }
 function isOptedOut(contact){return !!(contact&&contact.optedOut);}
 function getOptOutReason(contact){return contact&&contact.optOutReason||"";}
+function detectResponsible(text){var lo=(text||"").toLowerCase();if(/waiting|pending|awaiting|their side|they need|they will|approve|sign off|review by/.test(lo))return"them";return"me";}
+function makeActionItem(o){return Object.assign({id:uid("ai"),action:"",type:"other",dueDate:null,contact:null,responsible:"me",status:"active",createdAt:new Date().toISOString(),completedAt:null},o||{});}
 function parseNextStep(ns){if(!ns)return null;if(typeof ns==="string")return{action:ns,type:"other",dueDate:null,createdAt:null};return ns;}
 function nextStepUrgencyClr(dueDate){if(!dueDate)return C.muted;var days=Math.ceil((new Date(dueDate)-new Date())/86400000);if(days<0)return C.danger;if(days===0)return"#FECA57";if(days<=2)return"#FF9F43";return C.dim;}
 function fmtNextStepDate(iso){if(!iso)return"";try{return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric"});}catch(_){return"";}}
