@@ -9,7 +9,7 @@ const C = {
   radius:"8px", radiusSm:"5px", radiusLg:"18px", radiusCard:"18px",
 };
 const SP = {xs:"4px", sm:"8px", md:"16px", lg:"24px", xl:"32px"};
-const PIPE_NONE_META = {label:"Unstarted", code:"UNS", clr:"#7A7268"};
+const PIPE_NONE_META = {label:"Unstarted", code:"UNSTARTED", clr:"#7A7268"};
 
 /* \u2500\u2500 CONSTANTS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
 const PIPE = [
