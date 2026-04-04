@@ -74,6 +74,25 @@ const DEAL_DOCS = [
   {id:"onboarding",name:"Onboarding Checklist",stages:[4],category:"operations"}
 ];
 const SK = {leads:"pcrm_v9_leads",icp:"pcrm_v9_icp",weights:"pcrm_v9_weights",statsHistory:"pcrm_v9_stats",reminders:"pcrm_v9_reminders",apiKey:"pcrm_v9_apikey",strategy:"pcrm_v9_strategy",lastBackup:"pcrm_v9_lastbackup",scheduledEmails:"pcrm_v9_scheduled",weeklyGoal:"pcrm_v9_wgoal",emailTemplates:"pcrm_v9_templates",internalTeam:"pcrm_v9_team",qna:"pcrm_v9_qna",compIntel:"pcrm_v9_compintel"};
+const STAGE_LIMITS=[3,4,5,7,5];
+const STUCK_REASONS=["No reply","Follow-up not sent","Weak contact","Wrong persona","No clear pain","Low priority for prospect","Waiting on prospect","Internal blocker","Unclear value proposition"];
+function getStuckStatus(lead){
+  var ps=pipeStage(lead);
+  if(ps<0||ps===4)return{isStuck:false};
+  var limit=STAGE_LIMITS[ps]||7;
+  var history=lead.pipelineHistory||[];
+  var stageEntry=null;
+  for(var i=history.length-1;i>=0;i--){if(history[i].stage===ps){stageEntry=history[i];break;}}
+  var enteredAt=stageEntry?stageEntry.timestamp:(lead.createdAt||new Date().toISOString());
+  var daysInStage=Math.floor((Date.now()-new Date(enteredAt))/86400000);
+  var entries=lead.logEntries||[];
+  var lastAct=entries.length>0?new Date(entries[entries.length-1].timestamp):new Date(lead.createdAt||Date.now());
+  var daysSinceAct=Math.floor((Date.now()-lastAct)/86400000);
+  if(daysInStage>limit&&daysSinceAct>2){
+    return{isStuck:true,daysInStage:daysInStage,stageLimit:limit,daysSinceAct:daysSinceAct,severity:daysInStage/limit};
+  }
+  return{isStuck:false};
+}
 const NEXT_STEP_TYPES=[
   {id:"email",label:"Email",icon:"📧"},
   {id:"call",label:"Call",icon:"📞"},
