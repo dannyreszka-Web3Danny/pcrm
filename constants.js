@@ -280,7 +280,8 @@ function truncateAI(text,maxWords){
 }
 function computeUrgency(leads){
   var DAY=86400000,now=Date.now();
-  var active=(leads||[]).filter(function(l){return pipeStage(l)!==4;});
+  var todayMidnight=new Date();todayMidnight.setHours(0,0,0,0);
+  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;return true;});
   var scored=active.map(function(l){
     var signals=[],ds=calcDynamicScore(l,{},DEF_WEIGHTS);
     var todayStart=new Date();todayStart.setHours(0,0,0,0);
