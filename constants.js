@@ -326,6 +326,47 @@ function computeDelay(deal){
     flagged:recentDelays>=3
   };
 }
+function computeStageSuggestion(lead){
+  var stage=pipeStage(lead);
+  if(stage===4)return null;
+  var logs=lead.logEntries||[];
+  var docs=lead.dealRoom||[];
+  var SENT_STATUSES=["sent","received","approved"];
+  if(stage===-1){
+    var hasOutreach=logs.some(function(e){return e.category==="email"||e.category==="call";});
+    if(hasOutreach)return{suggestedStage:0,reason:"First outreach logged",confidence:"high",autoApply:true};
+    return null;
+  }
+  if(stage===0){
+    var hasReply=logs.some(function(e){
+      if(e.category!=="email")return false;
+      var c=(e.content||"").toLowerCase();
+      return c.indexOf("replied")>=0||c.indexOf("re:")>=0||c.indexOf("got back")>=0||c.indexOf("responded")>=0||c.indexOf("response")>=0;
+    });
+    var hasSpokeInterested=logs.some(function(e){
+      return e.category==="call"&&(e.content||"").indexOf("Spoke - interested")>=0;
+    });
+    if(hasReply||hasSpokeInterested)return{suggestedStage:1,reason:hasSpokeInterested?"Call: spoke, interested":"Positive reply received",confidence:"high",autoApply:false};
+    return null;
+  }
+  if(stage===1){
+    var hasMeeting=logs.some(function(e){return e.category==="meeting_notes";});
+    var hasNda=docs.some(function(d){return d.id==="nda"&&SENT_STATUSES.indexOf(d.status)>=0;});
+    if(hasMeeting||hasNda)return{suggestedStage:2,reason:hasMeeting?"Meeting notes logged":("NDA "+docs.find(function(d){return d.id==="nda";}).status),confidence:"high",autoApply:false};
+    return null;
+  }
+  if(stage===2){
+    var hasProposal=docs.some(function(d){return(d.id==="proposal"||d.id==="roi")&&SENT_STATUSES.indexOf(d.status)>=0;});
+    if(hasProposal)return{suggestedStage:3,reason:"Proposal or pricing shared",confidence:"high",autoApply:false};
+    return null;
+  }
+  if(stage===3){
+    var hasContract=docs.some(function(d){return d.id==="contract"&&SENT_STATUSES.indexOf(d.status)>=0;});
+    if(hasContract)return{suggestedStage:4,reason:"Contract on file",confidence:"mid",autoApply:false};
+    return null;
+  }
+  return null;
+}
 function parseNaturalDate(text){
   if(!text)return null;
   const now=new Date(),lo=text.toLowerCase();
