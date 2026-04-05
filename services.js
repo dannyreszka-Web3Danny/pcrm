@@ -81,6 +81,74 @@ function extractBlockerType(txt){
   if(lo.indexOf("external")>=0||lo.indexOf("client")>=0||lo.indexOf("waiting on")>=0)return"external";
   return"internal";
 }
+async function generateAiSuggestion(deal,icp,apiKey){
+  if(!apiKey)return null;
+  var pc=primaryContact(deal);
+  var stage=pipeStage(deal);
+  var stageName=stage>=0?(PIPE[stage]&&PIPE[stage].label)||"Stage "+stage:"Unstarted";
+  var ds=calcDynamicScore(deal,icp||{},DEF_WEIGHTS);
+  var lastLogs=(deal.logEntries||[]).slice(-5).map(function(e){return(e.category||"note")+": "+((e.content||"").slice(0,80));}).join(" | ")||"none";
+  var blocker=deal.blocker?(deal.blocker.text||deal.blocker.description||"present"):"none";
+  var nextStep=deal.nextStep||(deal.nextStep&&deal.nextStep.action)||"";
+  var prompt="Analyze this sales deal and return JSON only. No markdown.\n"+
+    "Company: "+deal.company+"\n"+
+    "Stage: "+stageName+"\n"+
+    "Days since last contact: "+ds.lastContact+"\n"+
+    "Days stuck in stage: "+ds.stuckDays+"\n"+
+    "Blocker: "+blocker+"\n"+
+    "Next step on file: "+(nextStep||"none")+"\n"+
+    "Recent activity: "+lastLogs+"\n"+
+    "Contact: "+(pc?pc.name+" ("+pc.title+")":"unknown")+"\n\n"+
+    "Return exactly this JSON shape:\n"+
+    "{\"action\":\"<imperative, max 10 words>\",\"reasoning\":\"<fact-based, max 12 words>\",\"why\":[\"<max 15 words>\",\"<max 15 words>\",\"<max 15 words>\"],\"dataUsed\":[\"<max 15 words>\",\"<max 15 words>\",\"<max 15 words>\"],\"gaps\":[\"<max 15 words>\",\"<max 15 words>\"],\"confidence\":\"high|mid|low\"}";
+  try{
+    var resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:400,messages:[{role:"user",content:prompt}]})
+    });
+    var data=await resp.json();
+    var text=(data.content&&data.content[0]&&data.content[0].text)||"{}";
+    var jsonMatch=text.match(/\{[\s\S]*\}/);
+    var parsed=jsonMatch?JSON.parse(jsonMatch[0]):{};
+    parsed.action=truncateAI(parsed.action||"Review deal status",10);
+    parsed.reasoning=truncateAI(parsed.reasoning||"Insufficient recent activity",12);
+    parsed.why=(parsed.why||[]).map(function(b){return truncateAI(b,15);});
+    parsed.dataUsed=(parsed.dataUsed||[]).map(function(b){return truncateAI(b,15);});
+    parsed.gaps=(parsed.gaps||[]).map(function(b){return truncateAI(b,15);});
+    parsed.confidence=["high","mid","low"].indexOf(parsed.confidence)>=0?parsed.confidence:"mid";
+    parsed.directive=parsed.confidence==="high"?"\u2192":parsed.confidence==="mid"?"~":"?";
+    parsed.generatedAt=new Date().toISOString();
+    return parsed;
+  }catch(e){
+    return{action:"Review deal status",reasoning:"Unable to generate suggestion",why:[],dataUsed:[],gaps:["AI unavailable"],confidence:"low",directive:"?",generatedAt:new Date().toISOString()};
+  }
+}
+async function parseCapture(text,leads,nowDealId,apiKey){
+  if(!apiKey||!text)return{dealId:nowDealId,confidence:"low",eventType:"note",summary:text,proposedNextStep:null,ambiguous:true};
+  var companies=(leads||[]).map(function(l){return l.company;}).join(", ");
+  var prompt="A sales BDM just typed this note: \""+text+"\"\n"+
+    "Active companies: "+companies+"\n"+
+    "Current deal in focus: "+((leads||[]).find(function(l){return l.id===nowDealId;})||{}).company+"\n\n"+
+    "Return JSON only:\n"+
+    "{\"dealId\":\"<id from list or null>\",\"confidence\":\"high|mid|low\",\"eventType\":\"call|email|note|meeting\",\"summary\":\"<max 20 words>\",\"proposedNextStep\":\"<max 10 words or null>\",\"ambiguous\":true|false}";
+  try{
+    var resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:200,messages:[{role:"user",content:prompt}]})
+    });
+    var data=await resp.json();
+    var text2=(data.content&&data.content[0]&&data.content[0].text)||"{}";
+    var jsonMatch=text2.match(/\{[\s\S]*\}/);
+    var parsed=jsonMatch?JSON.parse(jsonMatch[0]):{};
+    parsed.dealId=parsed.dealId&&(leads||[]).some(function(l){return l.id===parsed.dealId;})?parsed.dealId:nowDealId;
+    parsed.ambiguous=!!parsed.ambiguous||(parsed.confidence==="low");
+    return parsed;
+  }catch(e){
+    return{dealId:nowDealId,confidence:"low",eventType:"note",summary:text,proposedNextStep:null,ambiguous:true};
+  }
+}
 function buildPCRMReport(leads,icp,blocked,activeLeads,pipelineValue,coverageRatio,aiSummary,isWeek){
   var now=new Date();
   var todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());

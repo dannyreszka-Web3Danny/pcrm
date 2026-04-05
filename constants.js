@@ -271,6 +271,58 @@ function categorize(text){
 }
 
 /* \u2500\u2500 NLP DATE PARSER \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── EXECUTION ENGINE ────────────────────────────────────────────────────── */
+function truncateAI(text,maxWords){
+  if(!text)return"";
+  var words=text.trim().split(/\s+/);
+  if(words.length<=maxWords)return text.trim();
+  return words.slice(0,maxWords).join(" ")+"...";
+}
+function computeUrgency(leads){
+  var DAY=86400000,now=Date.now();
+  var active=(leads||[]).filter(function(l){return pipeStage(l)!==4;});
+  var scored=active.map(function(l){
+    var signals=[],ds=calcDynamicScore(l,{},DEF_WEIGHTS);
+    var todayStart=new Date();todayStart.setHours(0,0,0,0);
+    var hasMeeting=(l.logEntries||[]).some(function(e){
+      return e.category==="meeting_notes"&&new Date(e.timestamp)>=todayStart;
+    });
+    if(hasMeeting)signals.push({type:"meeting_today",weight:100});
+    var hasReply=(l.logEntries||[]).some(function(e){
+      return e.category==="email"&&(now-new Date(e.timestamp).getTime())<48*DAY&&
+        (e.content||"").toLowerCase().indexOf("replied")>=0;
+    });
+    if(hasReply)signals.push({type:"reply_waiting",weight:90});
+    if(ds.stuckDays>=3)signals.push({type:"decay",weight:Math.min(80,ds.stuckDays*2),value:ds.stuckDays});
+    if(isBlocked(l))signals.push({type:"blocked",weight:20});
+    var topWeight=signals.reduce(function(a,s){return Math.max(a,s.weight);},0);
+    return{leadId:l.id,weight:topWeight,signals:signals,stuckDays:ds.stuckDays,dealValue:l.dealValue||0};
+  });
+  scored.sort(function(a,b){
+    if(b.weight!==a.weight)return b.weight-a.weight;
+    if(b.stuckDays!==a.stuckDays)return b.stuckDays-a.stuckDays;
+    return b.dealValue-a.dealValue;
+  });
+  var topSlice=scored.slice(0,8),restSlice=scored.slice(8);
+  return{
+    now:topSlice.length>0?topSlice[0].leadId:null,
+    queue:topSlice.slice(1).map(function(s){return s.leadId;}),
+    notToday:restSlice.map(function(s){return s.leadId;}),
+    scored:scored
+  };
+}
+function computeDelay(deal){
+  var count=deal.delayCount||0;
+  var history=deal.delayHistory||[];
+  var now=Date.now(),DAY=86400000;
+  var recentDelays=history.filter(function(d){return(now-new Date(d.at).getTime())<7*DAY;}).length;
+  return{
+    frictionLevel:count<2?0:count===2?1:2,
+    requiresReason:count>=2,
+    requiresConfirm:count>=3,
+    flagged:recentDelays>=3
+  };
+}
 function parseNaturalDate(text){
   if(!text)return null;
   const now=new Date(),lo=text.toLowerCase();
