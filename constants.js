@@ -281,7 +281,7 @@ function truncateAI(text,maxWords){
 function computeUrgency(leads){
   var DAY=86400000,now=Date.now();
   var todayMidnight=new Date();todayMidnight.setHours(0,0,0,0);
-  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;return true;});
+  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;if(l.waitingUntil&&new Date(l.waitingUntil)>new Date())return false;return true;});
   var scored=active.map(function(l){
     var signals=[],ds=calcDynamicScore(l,{},DEF_WEIGHTS);
     var todayStart=new Date();todayStart.setHours(0,0,0,0);
@@ -289,6 +289,7 @@ function computeUrgency(leads){
       return e.category==="meeting_notes"&&new Date(e.timestamp)>=todayStart;
     });
     if(hasMeeting)signals.push({type:"meeting_today",weight:100});
+    if(l.waitingUntil&&new Date(l.waitingUntil)<=new Date())signals.push({type:"follow_up_due",weight:95});
     var hasReply=(l.logEntries||[]).some(function(e){
       return e.category==="email"&&(now-new Date(e.timestamp).getTime())<48*DAY&&
         (e.content||"").toLowerCase().indexOf("replied")>=0;
@@ -296,6 +297,7 @@ function computeUrgency(leads){
     if(hasReply)signals.push({type:"reply_waiting",weight:90});
     if(ds.stuckDays>=3)signals.push({type:"decay",weight:Math.min(80,ds.stuckDays*2),value:ds.stuckDays});
     if(isBlocked(l))signals.push({type:"blocked",weight:20});
+    var stg=pipeStage(l);if(stg>=3&&!l.waitingUntil&&!l._completedAt)signals.push({type:"late_stage",weight:18});
     var topWeight=signals.reduce(function(a,s){return Math.max(a,s.weight);},0);
     return{leadId:l.id,weight:topWeight,signals:signals,stuckDays:ds.stuckDays,dealValue:l.dealValue||0};
   });
