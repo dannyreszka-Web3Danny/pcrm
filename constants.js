@@ -280,7 +280,107 @@ function truncateAI(text,maxWords){
   if(words.length<=maxWords)return text.trim();
   return words.slice(0,maxWords).join(" ")+"...";
 }
-function computeUrgency(leads){
+function isReplyPattern(content){
+  var lo=(content||"").toLowerCase();
+  return lo.indexOf("replied")>=0||lo.indexOf(" re:")>=0||lo.indexOf("re: ")>=0||
+    lo.indexOf("got back")>=0||lo.indexOf("responded")>=0||lo.indexOf("response from")>=0||
+    lo.indexOf("wrote back")>=0||lo.indexOf("they replied")>=0||lo.indexOf("got a reply")>=0;
+}
+function computeDealMode(lead,sequences){
+  var stage=pipeStage(lead);
+  var logs=lead.logEntries||[];
+  var hasOutreach=logs.some(function(e){return e.category==="email"||e.category==="call";});
+  if(stage===PIPE_NONE&&!hasOutreach)return{mode:"watch",seq:null,prog:null,replyDetected:false};
+  var seqs=(sequences&&sequences.sequences)||[];
+  var enrolled=null,prog=null;
+  for(var i=0;i<seqs.length;i++){
+    var p=seqs[i].leadProgress&&seqs[i].leadProgress[lead.id];
+    if(p&&!p.bounced&&!p.optedOut){enrolled=seqs[i];prog=p;break;}
+  }
+  var replyDetected=logs.some(function(e){return e.category==="email"&&isReplyPattern(e.content);});
+  if(enrolled&&prog&&!replyDetected&&stage<2)return{mode:"sequence",seq:enrolled,prog:prog,replyDetected:false};
+  return{mode:"manual",seq:null,prog:null,replyDetected:replyDetected};
+}
+function computePrimaryAction(lead,dm){
+  if(dm.mode==="watch")return"[WATCH] Monitor — no outreach yet";
+  if(dm.mode==="sequence"){
+    var seqName=(dm.seq&&dm.seq.name)||"sequence";
+    var step=dm.seq&&dm.seq.steps&&dm.prog&&dm.seq.steps[dm.prog.currentStep];
+    var stepName=step?step.name:"next step";
+    return"[SEQ] "+seqName+" — "+stepName;
+  }
+  var logs=lead.logEntries||[];
+  var DAY=86400000,now=Date.now();
+  var hasReply48=logs.some(function(e){return e.category==="email"&&isReplyPattern(e.content)&&(now-new Date(e.timestamp).getTime())<48*DAY;});
+  if(hasReply48)return"[MAN] Reply received — respond now";
+  var ns=lead.nextStep||"";
+  if(ns)return"[MAN] "+ns;
+  return"[MAN] Review and take next action";
+}
+function computeCompositeScore(lead,sequences){
+  var DAY=86400000,now=Date.now();
+  var logs=lead.logEntries||[];
+  var stage=pipeStage(lead);
+  var ds=calcDynamicScore(lead,{},DEF_WEIGHTS);
+  var stuckDays=ds.stuckDays||0;
+  var todayStart=new Date();todayStart.setHours(0,0,0,0);
+  var hasMeeting=logs.some(function(e){return e.category==="meeting_notes"&&new Date(e.timestamp)>=todayStart;});
+  if(hasMeeting)return 135;
+  var hasReply48=logs.some(function(e){return e.category==="email"&&isReplyPattern(e.content)&&(now-new Date(e.timestamp).getTime())<48*DAY;});
+  if(hasReply48)return 95;
+  var score=0;
+  var decayScore=Math.min(50,stuckDays*2);
+  score+=decayScore;
+  var stageBonus=[0,8,16,28,40,0];
+  score+=(stage>=0&&stage<=4)?stageBonus[stage]:0;
+  var dv=lead.dealValue||0;
+  if(dv>=1000)score+=Math.min(20,Math.round(Math.log10(dv/1000)*10));
+  var hasReply=logs.some(function(e){return e.category==="email"&&isReplyPattern(e.content);});
+  if(hasReply&&!hasReply48)score+=15;
+  var lastOutbound=null;
+  for(var i=logs.length-1;i>=0;i--){
+    var e=logs[i];
+    if((e.category==="email"||e.category==="call")&&(!e.source||e.source!=="system")){
+      lastOutbound=new Date(e.timestamp).getTime();break;
+    }
+  }
+  if(lastOutbound&&(now-lastOutbound)>21*DAY&&!hasReply)score-=20;
+  var seqs=(sequences&&sequences.sequences)||[];
+  var enrolled=seqs.some(function(s){var p=s.leadProgress&&s.leadProgress[lead.id];return p&&!p.bounced&&!p.optedOut;});
+  if(enrolled){
+    var overdue=seqs.some(function(s){var p=s.leadProgress&&s.leadProgress[lead.id];return p&&p.nextUnlockAt&&new Date(p.nextUnlockAt)<=new Date();});
+    if(overdue)score+=10;
+  }
+  return Math.max(0,score);
+}
+function isQuitCandidate(lead,sequences){
+  if(pipeStage(lead)===4)return false;
+  var logs=lead.logEntries||[];
+  var DAY=86400000,now=Date.now();
+  var outboundEmails=logs.filter(function(e){return e.category==="email"&&(!e.source||e.source!=="system");});
+  if(outboundEmails.length<4)return false;
+  var hasReply=logs.some(function(e){return e.category==="email"&&isReplyPattern(e.content);});
+  if(hasReply)return false;
+  var lastEmail=outboundEmails.reduce(function(a,e){return Math.max(a,new Date(e.timestamp).getTime());},0);
+  if((now-lastEmail)<21*DAY)return false;
+  var seqs=(sequences&&sequences.sequences)||[];
+  var enrolled=seqs.some(function(s){var p=s.leadProgress&&s.leadProgress[lead.id];return p&&!p.bounced&&!p.optedOut;});
+  if(enrolled)return false;
+  var hist=lead.pipelineHistory||[];
+  if(hist.length>=2){
+    var lastMove=new Date(hist[hist.length-1].timestamp).getTime();
+    if((now-lastMove)<45*DAY)return false;
+  }
+  var hasPositiveCall=logs.some(function(e){
+    if(e.category!=="call")return false;
+    var c=(e.content||"").toLowerCase();
+    return c.indexOf("spoke")>=0&&(c.indexOf("interested")>=0||c.indexOf("positive")>=0||c.indexOf("keen")>=0||c.indexOf("open")>=0);
+  });
+  if(hasPositiveCall)return false;
+  if(lead.quitFlagSnoozedUntil&&new Date(lead.quitFlagSnoozedUntil)>new Date())return false;
+  return true;
+}
+function computeUrgency(leads,sequences){
   var DAY=86400000,now=Date.now();
   var todayMidnight=new Date();todayMidnight.setHours(0,0,0,0);
   var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;if(l.waitingUntil&&new Date(l.waitingUntil)>new Date())return false;return true;});
@@ -293,24 +393,26 @@ function computeUrgency(leads){
     if(hasMeeting)signals.push({type:"meeting_today",weight:100});
     if(l.waitingUntil&&new Date(l.waitingUntil)<=new Date())signals.push({type:"follow_up_due",weight:95});
     var hasReply=(l.logEntries||[]).some(function(e){
-      return e.category==="email"&&(now-new Date(e.timestamp).getTime())<48*DAY&&
-        (e.content||"").toLowerCase().indexOf("replied")>=0;
+      return e.category==="email"&&(now-new Date(e.timestamp).getTime())<48*DAY&&isReplyPattern(e.content);
     });
     if(hasReply)signals.push({type:"reply_waiting",weight:90});
     if(ds.stuckDays>=3)signals.push({type:"decay",weight:Math.min(80,ds.stuckDays*2),value:ds.stuckDays});
     if(isBlocked(l))signals.push({type:"blocked",weight:20});
     var stg=pipeStage(l);if(stg>=3&&!l.waitingUntil&&!l._completedAt)signals.push({type:"late_stage",weight:18});
     var topWeight=signals.reduce(function(a,s){return Math.max(a,s.weight);},0);
-    return{leadId:l.id,lead:l,weight:topWeight,signals:signals,stuckDays:ds.stuckDays,dealValue:l.dealValue||0};
+    var dm=computeDealMode(l,sequences);
+    var primaryAction=computePrimaryAction(l,dm);
+    var cScore=computeCompositeScore(l,sequences);
+    var qCand=isQuitCandidate(l,sequences);
+    var pLabel=cScore>=90?"HOT":cScore>=60?"MED":"LOW";
+    return{leadId:l.id,lead:l,weight:topWeight,signals:signals,stuckDays:ds.stuckDays,dealValue:l.dealValue||0,dealMode:dm.mode,primaryAction:primaryAction,compositeScore:cScore,priorityLabel:pLabel,quitCandidate:qCand};
   });
   var todayStr=new Date().toDateString();
   scored.sort(function(a,b){
     var aPromoted=(a.lead&&a.lead._promotedAt&&new Date(a.lead._promotedAt).toDateString()===todayStr)?1:0;
     var bPromoted=(b.lead&&b.lead._promotedAt&&new Date(b.lead._promotedAt).toDateString()===todayStr)?1:0;
     if(bPromoted!==aPromoted)return bPromoted-aPromoted;
-    if(b.weight!==a.weight)return b.weight-a.weight;
-    if(b.stuckDays!==a.stuckDays)return b.stuckDays-a.stuckDays;
-    return b.dealValue-a.dealValue;
+    return b.compositeScore-a.compositeScore;
   });
   var topSlice=scored.slice(0,8),restSlice=scored.slice(8);
   return{
