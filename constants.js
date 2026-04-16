@@ -1,5 +1,5 @@
 /* ── AI MODEL ───────────────────────────────────────────────────────────────── */
-const GEMINI_FLASH = "gemini-2.0-flash";
+const OR_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
 
 function checkStorageSize(){
   var leadsVal=localStorage.getItem("pcrm_v9_leads")||"";

@@ -102,13 +102,13 @@ async function generateAiSuggestion(deal,icp,apiKey){
     "Return exactly this JSON shape:\n"+
     "{\"action\":\"<imperative, max 10 words>\",\"reasoning\":\"<fact-based, max 12 words>\",\"why\":[\"<max 15 words>\",\"<max 15 words>\",\"<max 15 words>\"],\"dataUsed\":[\"<max 15 words>\",\"<max 15 words>\",\"<max 15 words>\"],\"gaps\":[\"<max 15 words>\",\"<max 15 words>\"],\"confidence\":\"high|mid|low\"}";
   try{
-    var resp=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+apiKey,{
+    var resp=await fetch("https://openrouter.ai/api/v1/chat/completions",{
       method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+      body:JSON.stringify({model:"meta-llama/llama-3.1-8b-instruct:free",messages:[{role:"user",content:prompt}]})
     });
     var data=await resp.json();
-    var text=(data.content&&data.content[0]&&data.content[0].text)||"{}";
+    var text=(data.choices[0].message.content||"{}");
     var jsonMatch=text.match(/\{[\s\S]*\}/);
     var parsed=jsonMatch?JSON.parse(jsonMatch[0]):{};
     parsed.action=truncateAI(parsed.action||"Review deal status",10);
@@ -133,13 +133,13 @@ async function parseCapture(text,leads,nowDealId,apiKey){
     "Return JSON only:\n"+
     "{\"dealId\":\"<id from list or null>\",\"confidence\":\"high|mid|low\",\"eventType\":\"call|email|note|meeting\",\"summary\":\"<max 20 words>\",\"proposedNextStep\":\"<max 10 words or null>\",\"ambiguous\":true|false}";
   try{
-    var resp=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+apiKey,{
+    var resp=await fetch("https://openrouter.ai/api/v1/chat/completions",{
       method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+      body:JSON.stringify({model:"meta-llama/llama-3.1-8b-instruct:free",messages:[{role:"user",content:prompt}]})
     });
     var data=await resp.json();
-    var text2=(data.content&&data.content[0]&&data.content[0].text)||"{}";
+    var text2=(data.choices[0].message.content||"{}");
     var jsonMatch=text2.match(/\{[\s\S]*\}/);
     var parsed=jsonMatch?JSON.parse(jsonMatch[0]):{};
     parsed.dealId=parsed.dealId&&(leads||[]).some(function(l){return l.id===parsed.dealId;})?parsed.dealId:nowDealId;
@@ -188,13 +188,13 @@ async function generateDealDiagnosis(lead,sequences,icp,apiKey){
     "Return exactly:\n"+
     "{\"currentState\":\"<what is objectively true now, max 12 words>\",\"risk\":\"<biggest risk if nothing changes, max 12 words>\",\"decidingQuestion\":\"<the one question that determines outcome, max 12 words>\"}";
   try{
-    var resp=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+apiKey,{
+    var resp=await fetch("https://openrouter.ai/api/v1/chat/completions",{
       method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+      body:JSON.stringify({model:"meta-llama/llama-3.1-8b-instruct:free",messages:[{role:"user",content:prompt}]})
     });
     var data=await resp.json();
-    var text=(data.content&&data.content[0]&&data.content[0].text)||"{}";
+    var text=(data.choices[0].message.content||"{}");
     var jsonMatch=text.match(/\{[\s\S]*\}/);
     var parsed=jsonMatch?JSON.parse(jsonMatch[0]):{};
     parsed.currentState=truncateAI(parsed.currentState||"Insufficient data",12);
