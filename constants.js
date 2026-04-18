@@ -1,5 +1,5 @@
 /* ── AI MODEL ───────────────────────────────────────────────────────────────── */
-const GROQ_LLAMA = "llama-3.1-8b-instant";
+const GROQ_LLAMA = "llama-3.3-70b-versatile";
 
 function checkStorageSize(){
   var leadsVal=localStorage.getItem("pcrm_v9_leads")||"";

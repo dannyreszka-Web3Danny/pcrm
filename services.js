@@ -118,7 +118,7 @@ async function orFetch(apiKey,prompt){
     var resp=await fetch("https://api.groq.com/openai/v1/chat/completions",{
       method:"POST",
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
-      body:JSON.stringify({model:"llama-3.1-8b-instant",messages:[{role:"user",content:prompt}]})
+      body:JSON.stringify({model:"llama-3.3-70b-versatile",messages:[{role:"user",content:prompt}]})
     });
     if(resp.status===429&&attempt<delays.length){
       await new Promise(function(r){setTimeout(r,delays[attempt]);});
@@ -127,6 +127,12 @@ async function orFetch(apiKey,prompt){
     if(resp.status===429){
       showAiError("AI service temporarily busy \u2014 please try again in a moment.");
       throw new Error("RATE_LIMITED");
+    }
+    if(resp.status===400){
+      var errBody=await resp.json().catch(function(){return{};});
+      console.error("Groq 400 error:",JSON.stringify(errBody));
+      showAiError("Groq rejected request \u2014 check console for details.");
+      throw new Error("BAD_REQUEST");
     }
     return resp;
   }
