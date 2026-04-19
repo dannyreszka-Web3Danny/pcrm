@@ -179,13 +179,19 @@ async function generateAiSuggestion(deal,icp,apiKey){
 }
 async function parseCapture(text,leads,nowDealId,apiKey){
   if(!apiKey||!text)return{dealId:nowDealId,confidence:"low",eventType:"note",summary:text,proposedNextStep:null,ambiguous:true};
-  var companies=(leads||[]).map(function(l){return l.company;}).join(", ");
-  var prompt="A sales BDM just typed this note: \""+text+"\"\n"+
-    "Active companies: "+companies+"\n"+
-    "Current deal in focus: "+((leads||[]).find(function(l){return l.id===nowDealId;})||{}).company+"\n\n"+
-    "CONSTRAINT: Only classify based on what the user typed. Do not infer company details from external knowledge.\n"+
+  var companyMap=(leads||[]).map(function(l){return '"'+l.company+'": "'+l.id+'"';}).join(", ");
+  var focusCompany=((leads||[]).find(function(l){return l.id===nowDealId;})||{}).company||"none";
+  var prompt="A sales BDM typed this note: \""+text+"\"\n\n"+
+    "Company ID map (name -> id): {"+companyMap+"}\n"+
+    "Currently focused deal: "+focusCompany+"\n\n"+
+    "Instructions:\n"+
+    "1. If a company name from the map appears in the note, set dealId to its exact ID and ambiguous to false.\n"+
+    "2. If no company is mentioned but there is a focused deal, use that deal's ID and set ambiguous to false.\n"+
+    "3. Only set ambiguous to true if multiple companies could match or the note has no company context.\n"+
+    "4. Write summary as a concise third-person event (e.g. 'Called and discussed pricing'), max 20 words.\n"+
+    "5. CONSTRAINT: Only classify based on what the user typed. Do not infer from external knowledge.\n\n"+
     "Return JSON only:\n"+
-    "{\"dealId\":\"<id from list or null>\",\"confidence\":\"high|mid|low\",\"eventType\":\"call|email|note|meeting\",\"summary\":\"<max 20 words>\",\"proposedNextStep\":\"<max 10 words or null>\",\"ambiguous\":true|false}";
+    "{\"dealId\":\"<exact id from map or null>\",\"confidence\":\"high|mid|low\",\"eventType\":\"call|email|note|meeting\",\"summary\":\"<max 20 words>\",\"proposedNextStep\":\"<max 10 words or null>\",\"ambiguous\":true|false}";
   try{
     var resp=await orFetch(apiKey,prompt);
     var data=await resp.json();
@@ -193,7 +199,7 @@ async function parseCapture(text,leads,nowDealId,apiKey){
     var jsonMatch=text2.match(/\{[\s\S]*\}/);
     var parsed=jsonMatch?JSON.parse(jsonMatch[0]):{};
     parsed.dealId=parsed.dealId&&(leads||[]).some(function(l){return l.id===parsed.dealId;})?parsed.dealId:nowDealId;
-    parsed.ambiguous=!!parsed.ambiguous||(parsed.confidence==="low");
+    if(parsed.confidence==="low")parsed.ambiguous=true;
     return parsed;
   }catch(e){
     return{dealId:nowDealId,confidence:"low",eventType:"note",summary:text,proposedNextStep:null,ambiguous:true};
