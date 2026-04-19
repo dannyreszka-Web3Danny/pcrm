@@ -221,7 +221,7 @@ async function answerQuestion(question,lead,apiKey){
       ". Deal room docs: "+(docs||"none")+
       ". Deal value: "+(lead.dealValue||0)+".";
   }
-  var prompt="You are a sales assistant. A BDM asked: \""+question+"\"\n\nDeal context: "+ctx+"\n\nAnswer in 1-3 concise sentences. Be direct and specific. If you cannot answer from the context, say so briefly.";
+  var prompt="A BDM asked: \""+question+"\"\n\nDeal context: "+ctx+"\n\nRules: Answer only from the data above. If the answer is one sentence, give one sentence. Maximum 2-3 sentences. No filler phrases. No restating the question. No 'based on what we know' or 'it appears that'. If you cannot answer from the data, say so in one sentence.";
   try{
     var resp=await orFetch(apiKey,prompt);
     var data=await resp.json();
