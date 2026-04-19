@@ -155,6 +155,7 @@ async function generateAiSuggestion(deal,icp,apiKey){
     "Next step on file: "+(nextStep||"none")+"\n"+
     "Recent activity: "+lastLogs+"\n"+
     "Contact: "+(pc?pc.name+" ("+pc.title+")":"unknown")+"\n\n"+
+    "CONSTRAINT: Only use the data provided above. Do not search the web, assume company details, or invent information not present in the data. If a field is missing or unknown, reflect that in gaps. Do not make claims about company size, funding, or industry unless explicitly listed above.\n\n"+
     "Return exactly this JSON shape:\n"+
     "{\"action\":\"<imperative, max 10 words>\",\"reasoning\":\"<fact-based, max 12 words>\",\"why\":[\"<max 15 words>\",\"<max 15 words>\",\"<max 15 words>\"],\"dataUsed\":[\"<max 15 words>\",\"<max 15 words>\",\"<max 15 words>\"],\"gaps\":[\"<max 15 words>\",\"<max 15 words>\"],\"confidence\":\"high|mid|low\"}";
   try{
@@ -182,6 +183,7 @@ async function parseCapture(text,leads,nowDealId,apiKey){
   var prompt="A sales BDM just typed this note: \""+text+"\"\n"+
     "Active companies: "+companies+"\n"+
     "Current deal in focus: "+((leads||[]).find(function(l){return l.id===nowDealId;})||{}).company+"\n\n"+
+    "CONSTRAINT: Only classify based on what the user typed. Do not infer company details from external knowledge.\n"+
     "Return JSON only:\n"+
     "{\"dealId\":\"<id from list or null>\",\"confidence\":\"high|mid|low\",\"eventType\":\"call|email|note|meeting\",\"summary\":\"<max 20 words>\",\"proposedNextStep\":\"<max 10 words or null>\",\"ambiguous\":true|false}";
   try{
