@@ -177,6 +177,59 @@ async function generateAiSuggestion(deal,icp,apiKey){
     return{action:"Review deal status",reasoning:"Unable to generate suggestion",why:[],dataUsed:[],gaps:["AI unavailable"],confidence:"low",directive:"?",generatedAt:new Date().toISOString()};
   }
 }
+async function summarizeLead(lead,apiKey){
+  if(!apiKey||!lead)return"No lead selected.";
+  var logs=(lead.logEntries||[]).slice(-15);
+  var logText=logs.length?logs.map(function(e){var d=new Date(e.timestamp).toLocaleDateString("en-US",{month:"short",day:"numeric"});return d+" ["+e.category+"]: "+e.content.slice(0,120);}).join("\n"):"No activity logged.";
+  var docs=(lead.dealRoom||[]).map(function(d){return d.name+" ("+d.status+")";}).join(", ")||"None";
+  var contacts=(lead.contacts||[]).map(function(c){return c.name+(c.title?" — "+c.title:"")+(c.email?" <"+c.email+">":"")+(c.lastContacted?", last contacted "+c.lastContacted:"");}).join("; ")||"None";
+  var stage=lead.pipeline>=0&&typeof lead.pipeline==="number"?"Stage "+(lead.pipeline+1)+" ("+["Signal","Echo","Locked","Proposal","Closed"][lead.pipeline]+")":"Not in pipeline";
+  var blocker=lead.blocker&&lead.blocker.text?"BLOCKED: "+lead.blocker.text:"No blocker";
+  var ctx="Company: "+lead.company+"\n"+
+    "Stage: "+stage+" | Score: "+(lead.totalScore||0)+"/100 | Value: "+(lead.dealValue||0)+"\n"+
+    "Next step: "+(lead.nextStep||"Not set")+"\n"+
+    "Contacts: "+contacts+"\n"+
+    "Status: "+blocker+"\n"+
+    "Notes: "+(lead.notes?lead.notes.slice(0,200):"None")+"\n"+
+    "Deal room: "+docs+"\n\n"+
+    "Activity log (most recent first):\n"+logText;
+  var prompt="You are a senior sales analyst. Write a concise deal brief using ONLY the data below.\n\n"+ctx+"\n\n"+
+    "Format your response as exactly 3 numbered blocks:\n"+
+    "1. SITUATION — current deal state, stage, last contact, who is the decision maker\n"+
+    "2. HISTORY — key events in chronological order, what was discussed, replies, meetings\n"+
+    "3. WHAT'S NEXT — specific recommended action based on next step, stage, and any gaps\n\n"+
+    "Be direct and factual. Max 3 sentences per block. Use only the data provided.";
+  try{
+    var resp=await orFetch(apiKey,prompt);
+    var data=await resp.json();
+    return((data.choices[0].message.content||"").trim()||"Could not generate summary.");
+  }catch(e){
+    return"Could not generate summary right now.";
+  }
+}
+async function answerQuestion(question,lead,apiKey){
+  if(!apiKey)return"No API key configured.";
+  var ctx="No lead in focus.";
+  if(lead){
+    var logs=(lead.logEntries||[]).slice(-5).map(function(e){return e.category+": "+e.content.slice(0,60);}).join("; ");
+    var docs=(lead.dealRoom||[]).map(function(d){return d.name+"("+d.status+")";}).join(", ");
+    ctx="Company: "+lead.company+
+      ". Stage: "+(lead.pipeline>=0?"stage "+lead.pipeline:"not in pipeline")+
+      ". Next step: "+(lead.nextStep||"none")+
+      ". Notes: "+(lead.notes?lead.notes.slice(0,120):"")+
+      ". Recent activity: "+(logs||"none")+
+      ". Deal room docs: "+(docs||"none")+
+      ". Deal value: "+(lead.dealValue||0)+".";
+  }
+  var prompt="You are a sales assistant. A BDM asked: \""+question+"\"\n\nDeal context: "+ctx+"\n\nAnswer in 1-3 concise sentences. Be direct and specific. If you cannot answer from the context, say so briefly.";
+  try{
+    var resp=await orFetch(apiKey,prompt);
+    var data=await resp.json();
+    return((data.choices[0].message.content||"").trim()||"No answer available.");
+  }catch(e){
+    return"Could not get an answer right now.";
+  }
+}
 async function parseCapture(text,leads,nowDealId,apiKey){
   if(!apiKey||!text)return{dealId:nowDealId,confidence:"low",eventType:"note",summary:text,proposedNextStep:null,ambiguous:true};
   var companyMap=(leads||[]).map(function(l){return '"'+l.company+'": "'+l.id+'"';}).join(", ");
