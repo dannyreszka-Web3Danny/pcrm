@@ -331,3 +331,37 @@ async function generateWeeklyReport(dailyReports,apiKey){
     return null;
   }
 }
+
+async function parseStructuredNote(raw, lead, apiKey){
+  if(!raw||!lead||!apiKey)return null;
+  var existingCts=(lead.contacts||[]).map(function(c){return c.name.toLowerCase();});
+  var existDocs=(lead.dealRoom||[]).map(function(d){return d.name;}).join(", ");
+  var prompt="Extract ALL structured data from this sales/meeting note for "+lead.company+". Return JSON only, no markdown, no explanation."
+    +" NOTE: "+JSON.stringify(raw)
+    +" Existing contacts: "+existingCts.join(", ")+"."
+    +" Existing deal docs: "+(existDocs||"none")+"."
+    +" OUTPUT JSON: {"
+    +" contacts:[{name,title,email}],"
+    +" subTasks:[{text,owner,dueDate}],"
+    +" nextStep:{text,date},"
+    +" blockers:[{text}],"
+    +" meetingNote:string, generalContext:string"
+    +" }"
+    +" RULES:"
+    +" contacts = new people NOT already in existing contacts list;"
+    +" subTasks = every distinct action item, todo, follow-up — one object per item;"
+    +" nextStep = single most important agreed next action with date if given;"
+    +" meetingNote = start with one sentence: [who] at [company] — [key outcome]. Then full prose;"
+    +" NEVER put meeting note content into subTasks;"
+    +" generalContext = everything else not captured above: observations, background, context, company info, relationship notes — free text;"
+    +" date format = ISO YYYY-MM-DD or empty string.";
+  try{
+    var resp=await orFetch(apiKey,prompt);
+    var data=await resp.json();
+    var txt=((data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"{}").replace(/```json|```/g,"").trim();
+    var jm=txt.match(/{[sS]*}/);
+    return jm?JSON.parse(jm[0]):null;
+  }catch(e){
+    return null;
+  }
+}
