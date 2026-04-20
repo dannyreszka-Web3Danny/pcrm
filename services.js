@@ -398,3 +398,19 @@ async function fetchGmailBody(tok,messageId){
     return xb(d.payload)||d.snippet||"";
   }catch(e){return"";}
 }
+
+async function parseGranolaNote(text,lead,apiKey){
+  if(!text||!apiKey)return null;
+  var schema='{"summary":"max 20 words","dealProgression":"call_happened|meeting_booked|proposal_discussed|deal_advanced|deal_closed|relationship_maintained","nextStep":"max 10 words or null","contactName":"name or null"}';
+  var prompt='Extract call outcome from this meeting note for '+lead.company+'. Return JSON only, no markdown.'
+    +' NOTE: '+JSON.stringify(text.slice(0,2000))
+    +' Return exactly: '+schema
+    +' Rules: call_happened=just a call, meeting_booked=next meeting confirmed, proposal_discussed=pricing/RFP/proposal, deal_advanced=clear progress, deal_closed=signed/closed, relationship_maintained=catch-up.';
+  try{
+    var resp=await orFetch(apiKey,prompt);
+    var data=await resp.json();
+    var txt=((data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"{}").replace(/```json|```/g,"").trim();
+    var jm=txt.match(/\{[\s\S]*\}/);
+    return jm?JSON.parse(jm[0]):null;
+  }catch(e){return null;}
+}
