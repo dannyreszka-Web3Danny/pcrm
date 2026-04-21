@@ -235,14 +235,24 @@ const DEF_CAMPAIGNS = [
 
 
 function calcScore(scores,weights){
-  const t=CRITERIA.reduce(function(a,cr){return a+(scores[cr.id]||5)*(weights[cr.id]||15);},0);
-  const w=CRITERIA.reduce(function(a,cr){return a+(weights[cr.id]||15);},0);
+  var t=0,w=0;
+  CRITERIA.forEach(function(cr){
+    var v=scores&&scores[cr.id];
+    if(v===null||v===undefined)return;
+    t+=v*(weights[cr.id]||15);
+    w+=(weights[cr.id]||15);
+  });
   return w>0?Math.round((t/(w*10))*100):0;
 }
 function calcAxes(scores){
+  function known(v){return v!==null&&v!==undefined?v:null;}
+  var dm=known(scores&&scores.decisionMaker),en=known(scores&&scores.engagement);
+  var iF=known(scores&&scores.industryFit),cs=known(scores&&scores.companySize),bu=known(scores&&scores.budget),pp=known(scores&&scores.painPoint);
+  var easeVals=[dm,en].filter(function(v){return v!==null;});
+  var valueVals=[iF,cs,bu,pp].filter(function(v){return v!==null;});
   return {
-    ease:Math.round(((scores.decisionMaker||5)+(scores.engagement||5))/2*10),
-    value:Math.round(((scores.industryFit||5)+(scores.companySize||5)+(scores.budget||5)+(scores.painPoint||5))/4*10),
+    ease:easeVals.length?Math.round(easeVals.reduce(function(a,v){return a+v;},0)/easeVals.length*10):50,
+    value:valueVals.length?Math.round(valueVals.reduce(function(a,v){return a+v;},0)/valueVals.length*10):50,
   };
 }
 function getQuadrant(ease,value){
