@@ -85,7 +85,7 @@ These must not be removed or broken:
 - **Stage progression suggestions**: appear when lead meets threshold; user confirms all stage changes manually; thresholds configurable in `pcrm_v9_settings`
 - **Three status systems — keep separate, label differently:** Pipeline stage (integer −1–4) | Lead CRM status (new/contacted/qualified/not_fit) | Outreach step status (new/drafted/sent/replied/booked) — always labelled **Step Status** in UI, never just "Status"
 - `tab_leads.js`: full LeadsTab with import, Matrix, HOT/BLOCKED filters
-- `tab_outreach.js`: OutreachTab with step editor, sequences, campaigns
+- `tab_outreach.js`: OutreachTab — Gmail-style sidebar layout: Compose button + Inbox section (Replies/Sent/Scheduled/Starred) + Sequences list + Campaigns section (visually distinct). Clicking any item opens content in the centre panel.
 - `tab_other.js`: Deal Room, doc rows
 - `app.js`: main app shell, routing, urgencyData, NowCard
 
