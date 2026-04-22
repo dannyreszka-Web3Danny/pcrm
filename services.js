@@ -39,6 +39,7 @@ function validateAttachments(files,existing){
   return errs;
 }
 /* ── GOOGLE DRIVE SYNC ──────────────────────────────────── */
+// SECURITY — Drive access limited to pcrm_sync.json only. Never access, read, list, or modify any other Drive file.
 var DRIVE_FILE_NAME="pcrm_sync.json";
 async function driveFindFile(tok){
   var url="https://www.googleapis.com/drive/v3/files?q=name%3D%27"+DRIVE_FILE_NAME+"%27+and+trashed%3Dfalse&fields=files(id,name,modifiedTime)";

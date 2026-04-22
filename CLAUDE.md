@@ -118,6 +118,16 @@ These must not be removed or broken:
 
 **Pipeline tab (Leads tab) — locked 2026-04-22, updated PCR-94:** Pipeline tab default view must show all leads with stage < 4 (stages −1 through 3). Stage 4 (CLIENT/Closed) leads are excluded from the default view and belong only in the Accounts tab. HOT box filters to hot leads only (clears all other active filters when toggled on). BLOCKED box filters to blocked leads only (clears all other active filters when toggled on). Both are clickable toggles. The pipeline stage pills are clickable toggles that filter by stage. This must never be changed. Filter state persists in `pcrm_v11_lead_filter` localStorage key — bump the key version if stale filters cause leads to disappear (this has happened twice: PCR-22 bumped v9→v10, PCR-48 bumped v10→v11).
 
+## FROZEN — Security Constraints (board approval required to change)
+
+These three security constraints are locked. Never remove, weaken, or work around them without explicit board approval. Any code that accesses Gmail, Calendar, or Drive must follow these rules exactly.
+
+**Gmail:** All Gmail fetch calls (list/fetch messages) must always filter by the `BD Replies` label. Never fetch emails without this filter. Comment in code: `SECURITY — never fetch emails without BD Replies label filter.`
+
+**Calendar:** Calendar access is limited to two actions only: (1) creating a new meeting invite when the user clicks Schedule Meeting or Schedule Demo, and (2) reading free/busy availability for Calendly integration. Never read, list, or modify existing calendar events for any other purpose. The `fetchLeadCalendarEvents` function is stubbed to `callback([])` and must never be re-implemented to make live API calls. Comment in code: `SECURITY — calendar access limited to creating new events and free/busy check only. Never read, list, or modify existing calendar events.`
+
+**Drive:** Drive access is limited to reading and writing the single file `pcrm_sync.json` only. Never access, read, list, or modify any other Drive file. Comment in code: `SECURITY — Drive access limited to pcrm_sync.json only. Never access, read, list, or modify any other Drive file.`
+
 ## Commit Convention
 
 - Message format: `PCR-{N}: <description>`
