@@ -1,5 +1,5 @@
 /* ── VERSION ─────────────────────────────────────────────────────────────────── */
-const VERSION = '04.26.21';
+const VERSION = '04.26.22';
 
 /* ── AI MODEL ───────────────────────────────────────────────────────────────── */
 const GROQ_LLAMA = "llama-3.3-70b-versatile";
@@ -652,12 +652,14 @@ function computeStageSuggestion(lead){
   if(stage===-1){
     var hasOutreach=logs.some(function(e){return e.category==="email"||e.category==="call";});
     if(hasOutreach)return{suggestedStage:0,reason:"First outreach logged",confidence:"high",autoApply:true};
+    var _fb0=checkStageGate(lead,-1);if(_fb0.met)return{suggestedStage:0,reason:"Profile complete — ready to advance",confidence:"medium",autoApply:false};
     return null;
   }
   if(stage===0){
     var hasSigReply=logs.some(function(e){if(e.category!=="email")return false;var lc=(e.content||"").toLowerCase();return lc.indexOf("replied")>=0||lc.indexOf("re:")>=0||lc.indexOf("responded")>=0;});
     var hasSigCall=logs.some(function(e){return e.category==="call";});
     if(hasSigReply||hasSigCall)return{suggestedStage:1,reason:hasSigCall?"Call logged — move to Echo":"Reply received — move to Echo",confidence:"medium",autoApply:false};
+    var _fb1=checkStageGate(lead,0);if(_fb1.met)return{suggestedStage:1,reason:"Gate met — ready to advance to Echo",confidence:"medium",autoApply:false};
     return null;
   }
   if(stage===1){
@@ -667,17 +669,20 @@ function computeStageSuggestion(lead){
     var hasPositiveCall=logs.some(function(e){return e.category==="call"&&(e.content||"").toLowerCase().indexOf("interested")>=0;});
     if(hasMeeting||hasNda)return{suggestedStage:2,reason:hasMeeting?"Meeting held — move to Locked":"NDA in progress — move to Locked",confidence:"high",autoApply:false};
     if(hasReply||hasPositiveCall)return{suggestedStage:2,reason:hasPositiveCall?"Positive call — move to Locked":"Reply received — qualify for Locked",confidence:"medium",autoApply:false};
+    var _fb2=checkStageGate(lead,1);if(_fb2.met)return{suggestedStage:2,reason:"Gate met — ready to advance to Locked",confidence:"medium",autoApply:false};
     return null;
   }
   if(stage===2){
     var hasProposal=docs.some(function(d){return(d.id==="proposal"||d.id==="roi")&&SENT_STATUSES.indexOf(d.status)>=0;});
     var hasDDMeeting=logs.filter(function(e){return e.category==="meeting_notes";}).length>=2;
     if(hasProposal||hasDDMeeting)return{suggestedStage:3,reason:hasProposal?"Proposal or ROI sent — enter Deep Dive":"Multiple meetings held — ready for solution validation",confidence:"high",autoApply:false};
+    var _fb3=checkStageGate(lead,2);if(_fb3.met)return{suggestedStage:3,reason:"Gate met — ready to advance to Proposal",confidence:"medium",autoApply:false};
     return null;
   }
   if(stage===3){
     var hasContract=docs.some(function(d){return d.id==="contract"&&SENT_STATUSES.indexOf(d.status)>=0;});
     if(hasContract)return{suggestedStage:4,reason:"Contract on file — move to ON THE WIRE",confidence:"high",autoApply:false};
+    var _fb4=checkStageGate(lead,3);if(_fb4.met)return{suggestedStage:4,reason:"Gate met — ready to close",confidence:"medium",autoApply:false};
     return null;
   }
   var _fallbackGate=checkStageGate(lead,stage);
