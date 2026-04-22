@@ -1,0 +1,465 @@
+{
+  "name": "PCRM - Intelligence Campaign Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign-intelligence",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Webhook: Campaign Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "pcrm-campaign-intelligence"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"accepted\", \"message\": \"Campaign research started\" }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Respond: 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [200, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Init: generate stable executionId, extract webhook payload\nconst webhookBody = $input.first().json.body || $input.first().json;\nconst campaignId = webhookBody.campaignId || '';\nconst criteria = webhookBody.criteria || {};\nconst userEmail = webhookBody.userEmail || 'danny.reszka@gmail.com';\n\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n    const r = Math.random() * 16 | 0;\n    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);\n  });\n}\n\n// One stable ID per workflow execution — reused on retries\nconst executionId = ($execution && $execution.id) ? $execution.id.replace(/-/g, '').slice(0, 32) : uuidv4();\nconst backendUrl = $env.PCRM_BACKEND_URL || 'http://178.104.168.218:3000';\nconst apolloApiKey = $env.APOLLO_API_KEY || webhookBody.apolloApiKey || '';\nconst serperApiKey = $env.SERPER_API_KEY || webhookBody.serperApiKey || '';\nconst anthropicApiKey = $env.ANTHROPIC_API_KEY || webhookBody.anthropicApiKey || '';\n\nreturn [{ json: {\n  executionId,\n  campaignId,\n  criteria,\n  userEmail,\n  backendUrl,\n  apolloApiKey,\n  serperApiKey,\n  anthropicApiKey,\n  updatedAt: new Date().toISOString(),\n  source: 'n8n',\n} }];"
+      },
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "Code: Init Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 420]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.backendUrl }}/campaigns/={{ $json.campaignId }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ requestId: $json.executionId + '-init', status: 'running', step: 'research', updatedAt: $json.updatedAt, source: 'n8n', payloadType: 'campaign_update' }) }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "HTTP: PATCH Campaign Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 420]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/leads",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "HTTP: GET Existing Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/v1/mixed_people/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Api-Key", "value": "={{ $('Code: Init Execution').first().json.apolloApiKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const kwParts = [].concat(Array.isArray(cr.industries) ? cr.industries : [], cr.keywords ? [cr.keywords] : []); return JSON.stringify({ page: 1, per_page: 25, person_titles: cr.jobTitles || [], person_locations: cr.geographies || [], q_organization_industry_tag_ids: cr.apolloIndustryIds || [], q_keywords: kwParts.join(' '), prospected_by_current_team: ['no'] }); })() }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "HTTP: Apollo Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process Apollo results — normalise into per-company items\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst apolloData = $input.first().json;\n\nconst existingLeads = (existingLeadsResp.data || []);\nconst people = apolloData.people || apolloData.results || [];\n\nif (people.length === 0) {\n  // No Apollo results — mark campaign failed\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn people.map((p, idx) => {\n  const org = p.organization || {};\n  const rawSite = org.website_url || org.primary_domain || '';\n  const domain = rawSite.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].toLowerCase();\n\n  return { json: {\n    personName: p.name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),\n    personTitle: p.title || '',\n    personEmail: p.email || '',\n    personPhone: (p.phone_numbers && p.phone_numbers[0]) ? p.phone_numbers[0].raw_number : '',\n    companyName: org.name || '',\n    domain,\n    website: rawSite,\n    industry: org.industry || '',\n    headcount: org.num_employees || null,\n    fundingStage: org.funding_stage || '',\n    linkedinUrl: org.linkedin_url || p.linkedin_url || '',\n    // Propagate context\n    executionId: initData.executionId,\n    campaignId: initData.campaignId,\n    criteria: initData.criteria,\n    userEmail: initData.userEmail,\n    backendUrl: initData.backendUrl,\n    serperApiKey: initData.serperApiKey,\n    anthropicApiKey: initData.anthropicApiKey,\n    updatedAt: initData.updatedAt,\n    source: initData.source,\n    existingLeads,\n    itemIndex: idx,\n  } };\n});"
+      },
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "Code: Process Apollo Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 420]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "Loop: Per Lead",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1400, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Api-Key", "value": "={{ $json.serperApiKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ q: $json.companyName + ' ' + ($json.industry || '') + ' company funding news hiring', num: 5 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "00000000-0000-0000-0000-000000000009",
+      "name": "HTTP: Serper Validate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $('Loop: Per Lead').item.json.anthropicApiKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ (function() { const lead = $('Loop: Per Lead').item.json; const criteria = lead.criteria || {}; const serperResults = ($input.first().json.organic || []).slice(0, 3).map(r => r.title + ': ' + r.snippet).join('\\n'); const prompt = 'Score this lead 1-10 for fit against our ideal customer profile.\\n\\nICP Criteria:\\n- Industries: ' + (criteria.industries || []).join(', ') + '\\n- Geographies: ' + (criteria.geographies || []).join(', ') + '\\n- Job Titles: ' + (criteria.jobTitles || []).join(', ') + '\\n- Other: ' + (criteria.description || '') + '\\n\\nLead:\\n- Company: ' + lead.companyName + '\\n- Industry: ' + lead.industry + '\\n- Domain: ' + lead.domain + '\\n- Headcount: ' + lead.headcount + '\\n- Contact: ' + lead.personName + ' (' + lead.personTitle + ')\\n\\nRecent signals:\\n' + serperResults + '\\n\\nRespond with ONLY: Score: X/10. Reason: one sentence.'; return JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 80, messages: [{ role: 'user', content: prompt }] }); })() }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "HTTP: Claude Score Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude score, check qualifying, check duplicate\nconst lead = $('Loop: Per Lead').item.json;\nconst claudeResp = $input.first().json;\n\n// Parse score from Claude response\nlet score = 0;\nlet reasoning = '';\ntry {\n  const text = (claudeResp.content && claudeResp.content[0]) ? claudeResp.content[0].text : '';\n  reasoning = text.slice(0, 200);\n  const m = text.match(/Score:\\s*(\\d+(?:\\.\\d+)?)/i) ||\n             text.match(/(\\d+(?:\\.\\d+)?)\\s*\\/\\s*10/i) ||\n             text.match(/\\b(10|[1-9])\\b/);\n  if (m) score = parseFloat(m[1]);\n} catch (e) {\n  reasoning = 'parse-error: ' + e.message;\n}\n\nconst QUALIFY_THRESHOLD = 6;\nconst isQualifying = score >= QUALIFY_THRESHOLD;\n\n// Duplicate check: match by domain then by company name\nconst existingLeads = lead.existingLeads || [];\nconst domain = (lead.domain || '').toLowerCase();\nconst companyName = (lead.companyName || '').toLowerCase().trim();\nlet isDuplicate = false;\nlet existingLeadId = null;\n\nif (domain) {\n  const match = existingLeads.find(l => {\n    const ld = ((l.website || l.domain || '')\n      .replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0]).toLowerCase();\n    return ld && ld === domain;\n  });\n  if (match) { isDuplicate = true; existingLeadId = match.id; }\n}\nif (!isDuplicate && companyName) {\n  const match = existingLeads.find(l =>\n    (l.company || l.name || '').toLowerCase().trim() === companyName\n  );\n  if (match) { isDuplicate = true; existingLeadId = match.id; }\n}\n\n// Per-lead requestId: stable per execution + lead index\nconst leadRequestId = lead.executionId + '-lead-' + lead.itemIndex;\n\nreturn [{ json: {\n  ...lead,\n  score,\n  reasoning,\n  isQualifying,\n  isDuplicate,\n  existingLeadId,\n  leadRequestId,\n  shouldCreate: isQualifying && !isDuplicate,\n} }];"
+      },
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "Code: Parse Score & Qualify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "qualify-check",
+              "leftValue": "={{ $json.shouldCreate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "IF: Qualifying Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2360, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.backendUrl }}/leads",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [{ name: $json.personName, title: $json.personTitle, email: $json.personEmail, phone: $json.personPhone, source: 'apollo' }], enrichment: { apolloScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'apollo_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "HTTP: POST Create Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2600, 180]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.backendUrl }}/leads/={{ $json.existingLeadId }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ requestId: $json.leadRequestId + '-link', payloadType: 'lead_update', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, signals: [{ type: 'campaign_match', value: 'Matched by Intelligence Campaign (score: ' + $json.score + '/10)', strength: 'medium', at: new Date().toISOString() }] }) }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000014",
+      "name": "HTTP: PATCH Link Existing Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2600, 420]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "input1",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000015",
+      "name": "Merge: Lead Result",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2840, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/={{ $('Code: Init Execution').first().json.campaignId }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ requestId: $('Code: Init Execution').first().json.executionId + '-enrichment', payloadType: 'campaign_update', source: 'n8n', status: 'running', step: 'enrichment', updatedAt: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000016",
+      "name": "HTTP: PATCH Campaign Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1640, 600]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/={{ $('Code: Init Execution').first().json.campaignId }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ requestId: $('Code: Init Execution').first().json.executionId + '-seqgen', payloadType: 'campaign_update', source: 'n8n', status: 'running', step: 'sequence_generation', updatedAt: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000017",
+      "name": "HTTP: PATCH Campaign Sequence Gen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1880, 600]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/={{ $('Code: Init Execution').first().json.campaignId }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ requestId: $('Code: Init Execution').first().json.executionId + '-ready', payloadType: 'campaign_update', source: 'n8n', status: 'paused', step: 'ready_for_review', updatedAt: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000018",
+      "name": "HTTP: PATCH Campaign Ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2120, 600]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Code: Init Execution').first().json.userEmail }}",
+        "subject": "PCRM: Campaign ready for review — {{ $('Code: Init Execution').first().json.campaignId }}",
+        "emailType": "text",
+        "message": "Your PCRM Intelligence Campaign has finished research and is ready for your review.\n\nCampaign ID: {{ $('Code: Init Execution').first().json.campaignId }}\nStatus: ready_for_review\n\nLog in to your PCRM, open the GTM Engine tab, and click 'Approve & Launch' to proceed.\n\nThis message was sent automatically by the PCRM n8n Intelligence Workflow.",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000019",
+      "name": "Gmail: Campaign Ready Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [2360, 600],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CONFIGURE_GMAIL_CREDENTIAL_ID",
+          "name": "PCRM Gmail Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Campaign Start": {
+      "main": [
+        [
+          { "node": "Respond: 202 Accepted", "type": "main", "index": 0 },
+          { "node": "Code: Init Execution", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Code: Init Execution": {
+      "main": [
+        [
+          { "node": "HTTP: PATCH Campaign Research", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: PATCH Campaign Research": {
+      "main": [
+        [
+          { "node": "HTTP: GET Existing Leads", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: GET Existing Leads": {
+      "main": [
+        [
+          { "node": "HTTP: Apollo Search", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: Apollo Search": {
+      "main": [
+        [
+          { "node": "Code: Process Apollo Results", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Code: Process Apollo Results": {
+      "main": [
+        [
+          { "node": "Loop: Per Lead", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Loop: Per Lead": {
+      "main": [
+        [
+          { "node": "HTTP: Serper Validate", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "HTTP: PATCH Campaign Enrichment", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: Serper Validate": {
+      "main": [
+        [
+          { "node": "HTTP: Claude Score Lead", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: Claude Score Lead": {
+      "main": [
+        [
+          { "node": "Code: Parse Score & Qualify", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Code: Parse Score & Qualify": {
+      "main": [
+        [
+          { "node": "IF: Qualifying Lead?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: Qualifying Lead?": {
+      "main": [
+        [
+          { "node": "HTTP: POST Create Lead", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "HTTP: PATCH Link Existing Lead", "type": "main", "index": 0 },
+          { "node": "Merge: Lead Result", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "HTTP: POST Create Lead": {
+      "main": [
+        [
+          { "node": "Merge: Lead Result", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: PATCH Link Existing Lead": {
+      "main": [
+        [
+          { "node": "Merge: Lead Result", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Merge: Lead Result": {
+      "main": [
+        [
+          { "node": "Loop: Per Lead", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: PATCH Campaign Enrichment": {
+      "main": [
+        [
+          { "node": "HTTP: PATCH Campaign Sequence Gen", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: PATCH Campaign Sequence Gen": {
+      "main": [
+        [
+          { "node": "HTTP: PATCH Campaign Ready", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP: PATCH Campaign Ready": {
+      "main": [
+        [
+          { "node": "Gmail: Campaign Ready Notification", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "versionId": "00000000-0000-0000-0000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "pcrm-n8n-instance"
+  },
+  "id": "pcrm-intelligence-campaign-v1",
+  "tags": [
+    { "name": "PCRM", "createdAt": "2026-04-22T00:00:00.000Z", "updatedAt": "2026-04-22T00:00:00.000Z" },
+    { "name": "Campaign", "createdAt": "2026-04-22T00:00:00.000Z", "updatedAt": "2026-04-22T00:00:00.000Z" }
+  ]
+}
