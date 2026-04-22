@@ -1,5 +1,5 @@
 /* ── VERSION ─────────────────────────────────────────────────────────────────── */
-const VERSION = '04.26.17';
+const VERSION = '04.26.18';
 
 /* ── AI MODEL ───────────────────────────────────────────────────────────────── */
 const GROQ_LLAMA = "llama-3.3-70b-versatile";
@@ -535,7 +535,7 @@ function isQuitCandidate(lead,sequences){
 function computeUrgency(leads,sequences){
   var DAY=86400000,now=Date.now();
   var todayMidnight=new Date();todayMidnight.setHours(0,0,0,0);
-  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;var gateReady=checkStageGate(l,pipeStage(l)).met;if(l.waitingUntil&&new Date(l.waitingUntil)>new Date()&&!gateReady)return false;return true;});
+  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;if(l.waitingUntil&&new Date(l.waitingUntil)>new Date())return false;return true;});
   var scored=active.map(function(l){
     var signals=[],ds=calcDynamicScore(l,{},DEF_WEIGHTS);
     var todayStart=new Date();todayStart.setHours(0,0,0,0);
@@ -548,8 +548,6 @@ function computeUrgency(leads,sequences){
       return e.category==="email"&&(now-new Date(e.timestamp).getTime())<48*DAY&&isReplyPattern(e.content);
     });
     if(hasReply)signals.push({type:"reply_waiting",weight:90});
-    var gateReady=checkStageGate(l,pipeStage(l)).met;
-    if(gateReady)signals.push({type:"gate_ready",weight:85});
     if(ds.stuckDays>=3)signals.push({type:"decay",weight:Math.min(80,ds.stuckDays*2),value:ds.stuckDays});
     if(isBlocked(l))signals.push({type:"blocked",weight:20});
     var stg=pipeStage(l);if(stg>=3&&!l.waitingUntil&&!l._completedAt)signals.push({type:"late_stage",weight:18});
@@ -605,6 +603,33 @@ function computeUrgency(leads,sequences){
     scored:scored,
     execTasks:execTasks
   };
+}
+/* Additive post-filter: gate-ready leads snoozed via waitingUntil are injected
+   back into the urgency result so Today and Deal Room agree on actionability. */
+function augmentUrgencyWithGateReady(result,leads){
+  var todayMidnight=new Date();todayMidnight.setHours(0,0,0,0);
+  var scoredIds=new Set((result.scored||[]).map(function(s){return s.leadId;}));
+  var gateLeads=(leads||[]).filter(function(l){
+    if(scoredIds.has(l.id))return false;
+    if(pipeStage(l)===4)return false;
+    if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;
+    if(!l.waitingUntil||new Date(l.waitingUntil)<=new Date())return false;
+    return checkStageGate(l,pipeStage(l)).met;
+  });
+  if(!gateLeads.length)return result;
+  var extraScored=gateLeads.map(function(l){
+    var cScore=computeCompositeScore(l,[])||0;
+    return{leadId:l.id,lead:l,weight:85,signals:[{type:"gate_ready",weight:85}],stuckDays:0,dealValue:l.dealValue||0,dealMode:"manual",primaryAction:"advance_stage",compositeScore:cScore,priorityLabel:cScore>=90?"HOT":cScore>=60?"MED":"LOW",quitCandidate:false};
+  });
+  var combined=(result.scored||[]).concat(extraScored);
+  combined.sort(function(a,b){return b.compositeScore-a.compositeScore;});
+  var topSlice=combined.slice(0,8),restSlice=combined.slice(8);
+  return Object.assign({},result,{
+    scored:combined,
+    now:topSlice.length>0?topSlice[0].leadId:null,
+    queue:topSlice.slice(1).map(function(s){return s.leadId;}),
+    notToday:restSlice.map(function(s){return s.leadId;})
+  });
 }
 function computeDelay(deal){
   var count=deal.delayCount||0;
