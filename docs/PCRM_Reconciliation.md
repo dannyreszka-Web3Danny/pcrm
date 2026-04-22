@@ -2291,153 +2291,210 @@ orange, never red. It means check this, not this broke.
 
 SEND TO CLAUDE CODE — STEP 20B (URL Drop Enrichment)
 
-Add URL drop enrichment to the PCRM lead enrichment
-pipeline. This step runs after a lead is created or
-updated and a domain or URL is detected in any captured
-input — paste, voice capture, or manual entry.
+Add URL drop enrichment to the campaign research flow
+and to the New Lead import flow.
 
-When a URL or bare domain is detected in lead.website,
-lead.notes, or the CaptureBar input, extract the domain
-and post it to the n8n enrichment webhook at the endpoint
-defined in pcrm_v9_settings under n8nWebhookUrl, with
-the payload:
+When a user pastes a company URL anywhere in the PCRM
+— in the campaign criteria field, in the import leads
+modal, or in the New Lead form — the system should
+automatically read the website and extract:
+  - Company name
+  - Industry and product/service description
+  - Company size indicators from the site
+  - Key personnel mentioned on the site (About, Team pages)
+  - Recent news or announcements
+  - Technology signals from the site content
 
-  {
-    leadId: lead.id,
-    domain: extracted_domain,
-    source: "url_drop",
-    requestId: new uuid,
-    updatedAt: current timestamp
-  }
+Use the backend to fetch and parse the URL. Pass the
+extracted text to the AI to structure it into the lead
+enrichment object. Show the extracted data to the user
+for confirmation before saving.
 
-The n8n workflow processes the domain and returns
-enrichment data via the existing backend api/leads
-endpoint. The merge follows Rule B: replace fields
-only when the backend timestamp is newer than the
-stored timestamp. Never overwrite pipeline stage,
-CRM status, notes, or outreach data.
+This means a user can drop a URL and get a pre-filled
+lead with real data in under 30 seconds — no manual
+research needed.
 
-In the PCRM UI, when a URL is detected in a captured
-input, show a brief inline indicator "Enriching from
-URL..." next to the lead row in the Leads tab. This
-indicator disappears on next data refresh. Do not
-block any action — enrichment is always background-only.
+Store the source URL in lead.enrichment.sourceUrl.
+Store extraction timestamp in lead.enrichment.updatedAt.
 
-Do not change the CaptureBar routing logic, parseCapture,
-or any scoring or urgency functions. This is purely
-additive enrichment triggering.
+Add a URL field to the New Lead form and to the import
+modal. When a URL is detected in the paste field during
+import, trigger enrichment automatically for that row.
 
----
-
-TEST BEFORE CONTINUING — Paste a URL into the CaptureBar
-or lead notes. Verify the enrichment indicator appears.
-Verify a POST is sent to the n8n webhook with the correct
-payload. Verify the merge follows Rule B and does not
-overwrite pipeline stage or outreach data. Verify all
-existing features still work.
+Do not change any existing lead creation logic.
 
 ---
 
 SEND TO CLAUDE CODE — STEP 20C (Hunter.io Integration)
 
-Add Hunter.io contact discovery to the lead enrichment
-flow. This runs when a lead has a domain but no contacts,
-or when the BDM explicitly triggers contact discovery
-from the lead panel.
+Add Hunter.io to the integrations hub alongside Apollo.
 
-Add a Find Contacts button inside the CompanyPanel
-(shown when a lead is open). Clicking it calls the
-backend api/hunter endpoint with:
+Hunter.io finds and verifies email addresses by company
+domain. When Apollo returns a contact without a verified
+email, automatically try Hunter.io as a fallback.
 
-  {
-    leadId: lead.id,
-    domain: lead.website or extracted domain,
-    requestId: new uuid
-  }
+Add Hunter.io API key field to the Settings integrations
+section under pcrm_v9_hunter_key.
 
-The backend calls the Hunter.io Domain Search API using
-the Hunter.io API key stored in pcrm_v9_settings under
-hunterApiKey. The backend returns an array of contacts
-with: firstName, lastName, email, position, confidence.
+Integration points:
+  - During campaign enrichment: after Apollo finds a
+    contact, if email is missing or unverified, query
+    Hunter.io domain search with the company domain
+  - In the lead detail view: add a Find Email button
+    on any contact that has no email address — clicking
+    it queries Hunter.io for that contact's email
+  - Hunter.io free tier: 25 searches per month
 
-Merge returned contacts into lead.contacts[] following
-Rule B: merge by email as the unique ID. Never overwrite
-existing contact fields if the existing value was set
-manually (source: manual). Set source: hunter on all
-Hunter-sourced contacts. Cap at 10 contacts per lead.
+Hunter.io endpoint: https://api.hunter.io/v2
+Key endpoints: domain-search, email-finder, email-verifier
 
-In the UI, after discovery completes show a brief
-"X contacts found" inline banner inside the CompanyPanel.
-The contacts appear immediately in the existing contacts
-list. No page reload required.
-
-Store the Hunter.io API key in pcrm_v9_settings.
-Add an input field for it in the Settings panel alongside
-the existing API key fields. Label it Hunter.io API Key.
-
-Do not change any existing contact editing, deletion,
-or role-badge logic. This is additive contact discovery
-only.
-
----
-
-TEST BEFORE CONTINUING — Open a lead with a domain but
-no contacts. Click Find Contacts. Verify a POST is sent
-to api/hunter. Verify returned contacts appear in the
-contacts list with source: hunter. Verify manually added
-contacts are not overwritten. Verify the Hunter.io API
-key field appears in Settings.
+Show verification status on each contact email:
+  verified (green), unverified (yellow), invalid (red)
 
 ---
 
 SEND TO CLAUDE CODE — STEP 20D (Intent-Based Timing)
 
-Add intent-based outreach timing to the sequence engine.
-This controls when a sequence step becomes eligible to
-send, based on the lead's recent signal activity.
+Wire the existing signals array to trigger campaign
+outreach automatically when buying intent signals appear.
 
-Add a timing mode field to each sequence step: standard
-or intent_gated. Existing steps default to standard,
-which is the current behaviour — no change.
+Currently signals are detected and stored but nothing
+happens automatically. Add an intent trigger layer:
 
-When a step is set to intent_gated, it becomes eligible
-to send only when at least one of these conditions is
-true for the lead:
+When a lead receives a new strong signal — funding,
+hiring_signal, positive_intent, or reply_received —
+and the lead has an active campaign or sequence paused:
+  - Show a notification in the Today tab: "Intent signal
+    detected for [company] — resume outreach?"
+  - One tap resumes the sequence or campaign
+  - The outreach timing adapts to the signal — funding
+    signal triggers immediate outreach, hiring signal
+    triggers outreach within 24 hours
 
-  - A signal was logged in the last 7 days where
-    signal.strength >= 3 (high intent signals: funding,
-    hiring burst, product launch, competitor switch)
-  - lead.urgencyScore >= 70 (already surfacing in NOW
-    or high QUEUE position)
-  - A reply was received on any prior step in this
-    sequence within the last 14 days (positive engagement)
+Add a signal timing rules object to pcrm_v9_settings:
+  funding_signal: reach out within 2 hours
+  hiring_signal: reach out within 24 hours
+  positive_intent: reach out within 4 hours
+  reply_received: reach out immediately
 
-If none of these conditions are met, the step is held
-and shows as intent_held in the sequence step list.
-When the condition is later met, the step automatically
-becomes ready and shows as ready in the normal way.
+These are defaults — user can adjust in settings.
 
-In the step editor in OutreachTab, add a Timing dropdown
-under the existing step fields with options:
-  Standard (send when unlocked)
-  Intent-Gated (send only on high-intent signal)
+This is the intent-based timing layer. It means outreach
+happens when the prospect is most likely to respond,
+not on a fixed schedule.
 
-Do not change isStepReady, addContactToSeq, handleSchedule,
-or fillVars. Only add the pre-check condition before
-isStepReady is called: if stepMode is intent_gated and
-no intent condition is met, return held without calling
-isStepReady. All frozen functions remain unchanged.
-
-Store stepMode on the step object in pcrm_v9_sequences.
-This is additive to the existing step shape.
+Do not change any existing signal detection or sequence
+logic. This layer is purely additive.
 
 ---
 
-TEST BEFORE CONTINUING — Create a sequence with one step
-set to Intent-Gated. Enroll a lead with no recent signals.
-Verify the step shows as intent_held. Add a signal with
-strength 3 or higher. Verify the step becomes ready.
-Verify standard steps are completely unaffected.
+TEST BEFORE CONTINUING — Drop a company URL into the
+New Lead import modal. Verify it extracts company data
+automatically. Verify Hunter.io finds an email for a
+contact missing one. Verify an intent signal on a
+paused lead shows the resume notification in Today tab.
+
+---
+
+SEND TO CLAUDE CODE — STEP 20E (GTM Hub Redesign)
+
+Redesign the Outreach tab as a unified GTM hub modelled
+on Gmail's layout. This replaces the current Sequences,
+Compose, and Campaigns sub-tabs with one unified
+sidebar-driven layout.
+
+The tab keeps its ID as outreach in code forever.
+The display label changes to GTM Engine only as the
+very last action in the entire build — Step 19.
+
+LAYOUT:
+
+Left sidebar — four sections in order:
+
+  1. Compose button at the very top. Clicking it opens
+     a compose panel in the centre area — exactly like
+     Gmail's compose button. No sub-tab navigation.
+
+  2. Inbox section with these folders:
+       Replies — emails from BD contacts via Gmail MCP
+       Sent — all emails sent from the PCRM
+       Scheduled — emails queued but not yet sent
+       Starred — emails manually starred by the user
+       Labels — user-created labels with + New Label
+       option at the bottom
+
+  3. Sequences section listing all sequences by name.
+     A + New Sequence option at the bottom.
+     Clicking a sequence opens it in the centre panel
+     showing the sequence steps and enrolled contacts.
+
+  4. Campaigns section — visually distinct from all
+     other sections. Use a different icon (automation
+     or rocket), a subtle separator above it, and a
+     slightly different background treatment to signal
+     this is an automation engine not manual email.
+     List all campaigns by name with status indicator.
+     A + New Campaign option at the bottom.
+     Clicking a campaign opens the full campaign detail
+     view with research controls, leads table, and
+     automation status — not just an email thread.
+
+Centre panel — content area that changes based on
+what is selected in the sidebar:
+  - Compose selected: compose panel with To, Subject,
+    Body, tone selector, generate draft button
+  - Inbox folder selected: email list with sender,
+    subject, preview, timestamp
+  - Sequence selected: sequence step list and
+    enrolled contacts
+  - Campaign selected: campaign detail with leads
+    and automation controls
+
+Right panel — detail view:
+  - Email selected: full email content with reply
+    button
+  - Sequence step selected: step editor
+  - Campaign lead selected: lead detail
+
+The visual distinction between Inbox/Sequences and
+Campaigns must be immediately obvious. A BDM looking
+at the sidebar should instantly understand that
+Inbox and Sequences are things they control manually,
+while Campaigns is the autonomous engine that runs
+on its own.
+
+Data sources:
+  Replies: Gmail MCP BD Replies label
+  Sent: pcrm_v9_scheduled sent log
+  Scheduled: pcrm_v9_scheduled where status pending
+  Starred: new pcrm_v9_starred_emails in localStorage
+  Labels: new pcrm_v9_email_labels in localStorage
+
+Star button on each email in the list.
+Label button lets user assign custom labels.
+BD contacts only — emails from or to contacts in
+pcrm_v9_leads. No personal emails ever shown.
+
+Do not change any existing sequence logic.
+Do not change any existing campaign logic.
+Do not change any existing send or Gmail logic.
+This is a layout and navigation redesign only.
+All existing functionality stays exactly the same —
+it is just accessed through the new sidebar structure.
+
+Update CLAUDE.md after building.
+
+---
+
+TEST BEFORE CONTINUING — Verify the sidebar shows
+all four sections. Click Compose and verify it opens
+in the centre panel. Click a sequence and verify it
+shows the sequence detail. Click a campaign and verify
+it shows the campaign detail with the distinct visual
+treatment. Click Replies in the Inbox section and
+verify BD reply emails appear. Verify no personal
+emails appear. Verify all existing sequence and
+campaign functionality still works.
 
 ---
 
@@ -2773,77 +2830,61 @@ in Excel or Google Sheets.
 
 SEND TO CLAUDE CODE — STEP 27B (Proposal Tracking)
 
-Add proposal tracking to the Deal Room tab. This gives
-the BDM a clear view of which proposals have been sent,
-when, and what the follow-up status is.
+Add proposal tracking to all documents sent from the
+PCRM. This is one of the highest-value features in the
+entire build — it tells you who opened your proposal,
+how long they spent on each section, and whether they
+forwarded it to other stakeholders.
 
-Add a Proposals section to the deal room panel for each
-lead, above the Document Status section. Each proposal
-entry stores:
+When a document is sent via Gmail from the PCRM:
+  - Generate a unique tracking token for this send
+  - Embed a 1x1 pixel tracking image in the document
+    or HTML email pointing to the backend tracking
+    endpoint: GET /api/track/:token
+  - Store the token mapped to the lead, contact, and
+    document in the backend
 
-  {
-    proposalId: uuid,
-    documentId: reference to the generated document,
-    sentAt: timestamp,
-    sentTo: contact email or name,
-    followUpDueAt: timestamp (sentAt + 3 days default),
-    followUpStatus: pending | sent | booked | stalled,
-    notes: string
-  }
+When the backend receives a tracking hit:
+  - Record: timestamp, IP address, user agent
+  - Identify the device type (desktop/mobile/tablet)
+  - Append to the document's tracking log
 
-When a document of type proposal or term-sheet is sent
-via the Send via Gmail flow, automatically create a
-proposal tracking entry for that lead. Set followUpDueAt
-to three days after sentAt. Set followUpStatus to pending.
+Show tracking data in the deal room document status:
+  - Opened: yes/no with timestamp of first open
+  - View count: how many times opened
+  - Last viewed: timestamp
+  - Devices: which device types opened it
+  - Time spent: estimated from multiple hits
 
-In the Proposals section in the deal room UI:
-  - Show each proposal with its sent date, contact, and
-    follow-up due date
-  - Colour the follow-up due date orange if today is
-    within one day of followUpDueAt and status is still
-    pending
-  - Colour it red if followUpDueAt has passed and status
-    is still pending
-  - Show a Follow Up button that opens the Gmail compose
-    flow pre-addressed to the same contact, pre-filled
-    with a short follow-up template
-  - Show a Mark Booked button that sets followUpStatus
-    to booked and records the timestamp
-  - Show a Mark Stalled button that sets followUpStatus
-    to stalled (removes the colour urgency indicator)
+Forward detection:
+  - If the same document is opened from a different
+    email client or IP not matching the original
+    contact, flag it as "Possibly forwarded — new
+    viewer detected" in the deal room
+  - This surfaces unknown stakeholders
 
-In the Activity tab, when followUpDueAt is within 24
-hours and status is pending, surface the proposal as
-an overdue task in the ReminderBanner. Label it:
-"Follow up on proposal — [lead company name]".
+Trigger notifications in Today tab:
+  - "VaultChain opened your proposal 3 times today —
+    follow up now"
+  - "New viewer on your Blueberry proposal — possible
+    forwarding to decision maker"
 
-Store proposal tracking data in the lead object under
-lead.proposals[] in pcrm_v9_leads. This is additive to
-the existing lead shape. Never overwrite existing fields.
+Store all tracking data in the backend under
+/data/tracking.json append-only log.
 
-Do not change the Document Status section, document
-editor, or Gmail send flow logic. Only hook into the
-post-send event to create the tracking entry.
-
-Do not change the ReminderBanner frozen logic. Only
-add proposal follow-ups to the existing overdue tasks
-array that ReminderBanner already renders.
+This is purely additive — existing document and Gmail
+send flows stay exactly as they are. Tracking is
+layered on top.
 
 ---
 
-TEST BEFORE CONTINUING — Send a proposal document via
-Gmail for a test lead. Verify a tracking entry appears
-in the Proposals section with a pending status and a
-follow-up due date three days out. Manually set the
-date back to verify the orange then red urgency colours.
-Click Follow Up and verify the Gmail compose opens
-pre-filled. Click Mark Booked and verify the status
-updates and urgency colour disappears. Verify the
-proposal appears in ReminderBanner when overdue.
+TEST BEFORE CONTINUING — Send a test document to
+yourself. Open it. Verify the tracking hit appears
+in the backend tracking log. Verify the deal room
+shows opened status. Verify the Today tab notification
+appears.
 
 ---
-
-### SESSION 10 — SUPABASE MIGRATION
 
 This session moves your data from localStorage and
 Hetzner JSON files to a proper Supabase database,
