@@ -1,5 +1,5 @@
 /* ── VERSION ─────────────────────────────────────────────────────────────────── */
-const VERSION = '04.22.17';
+const VERSION = '04.22.18';
 
 /* ── AI MODEL ───────────────────────────────────────────────────────────────── */
 const GROQ_LLAMA = "llama-3.3-70b-versatile";
@@ -522,7 +522,7 @@ function isQuitCandidate(lead,sequences){
 function computeUrgency(leads,sequences){
   var DAY=86400000,now=Date.now();
   var todayMidnight=new Date();todayMidnight.setHours(0,0,0,0);
-  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;if(l.waitingUntil&&new Date(l.waitingUntil)>new Date())return false;return true;});
+  var active=(leads||[]).filter(function(l){if(pipeStage(l)===4)return false;if(l._completedAt&&new Date(l._completedAt)>=todayMidnight)return false;var gateReady=checkStageGate(l,pipeStage(l)).met;if(l.waitingUntil&&new Date(l.waitingUntil)>new Date()&&!gateReady)return false;return true;});
   var scored=active.map(function(l){
     var signals=[],ds=calcDynamicScore(l,{},DEF_WEIGHTS);
     var todayStart=new Date();todayStart.setHours(0,0,0,0);
@@ -535,6 +535,8 @@ function computeUrgency(leads,sequences){
       return e.category==="email"&&(now-new Date(e.timestamp).getTime())<48*DAY&&isReplyPattern(e.content);
     });
     if(hasReply)signals.push({type:"reply_waiting",weight:90});
+    var gateReady=checkStageGate(l,pipeStage(l)).met;
+    if(gateReady)signals.push({type:"gate_ready",weight:85});
     if(ds.stuckDays>=3)signals.push({type:"decay",weight:Math.min(80,ds.stuckDays*2),value:ds.stuckDays});
     if(isBlocked(l))signals.push({type:"blocked",weight:20});
     var stg=pipeStage(l);if(stg>=3&&!l.waitingUntil&&!l._completedAt)signals.push({type:"late_stage",weight:18});
