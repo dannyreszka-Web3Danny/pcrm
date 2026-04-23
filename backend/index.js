@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const leadsRouter = require('./routes/leads');
 const campaignsRouter = require('./routes/campaigns');
@@ -7,7 +8,21 @@ const hunterRouter = require('./routes/hunter');
 const app = express();
 const PORT = 3000;
 
+const API_SECRET = process.env.PCRM_API_SECRET;
+if (!API_SECRET) {
+  console.error('FATAL: PCRM_API_SECRET not set in .env');
+  process.exit(1);
+}
+
 app.use(express.json());
+
+app.use(function requireApiKey(req, res, next) {
+  const key = req.headers['x-pcrm-key'];
+  if (!key || key !== API_SECRET) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  next();
+});
 
 app.use('/leads', leadsRouter);
 app.use('/campaigns', campaignsRouter);
