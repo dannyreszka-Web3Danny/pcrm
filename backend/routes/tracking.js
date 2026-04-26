@@ -26,15 +26,25 @@ function requireKey(req, res, next) {
   next();
 }
 
+function detectDevice(ua) {
+  if (!ua) return 'unknown';
+  var uaLower = ua.toLowerCase();
+  if (/mobile|android|iphone|ipod|blackberry|windows phone/.test(uaLower)) return 'mobile';
+  if (/tablet|ipad/.test(uaLower)) return 'tablet';
+  return 'desktop';
+}
+
 // Public — tracking pixel (no auth required)
 router.get('/pixel/:token', function(req, res) {
   const token = req.params.token;
+  const ua = req.headers['user-agent'] || '';
   const events = readEvents();
   events.push({
     token,
     openedAt: new Date().toISOString(),
     ip: req.headers['x-forwarded-for'] || req.ip,
-    ua: req.headers['user-agent'] || ''
+    ua,
+    device: detectDevice(ua)
   });
   writeEvents(events);
   res.set({
