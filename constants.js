@@ -92,7 +92,10 @@ function migrateLeadPipelineV7(lead){
   return Object.assign({},lead,{pipeline:np,pipelineHistory:nh});
 }
 function migrateLeadPipelineV8(lead){
-  var contacts=(lead.contacts||[]).map(function(c){return c.role?c:Object.assign({},c,{role:"unknown"});});
+  var contacts=(lead.contacts||[]).map(function(c){
+    var withRole=c.role?c:Object.assign({},c,{role:"unknown"});
+    return Object.assign({photo_url:null,twitter_url:null,github_url:null,headline:null,email_status:null},withRole);
+  });
   return Object.assign({enrichment:null,signals:[],outreachOutcome:null,callOutcomes:[],snoozedUntil:null,snoozeReason:null},lead,{contacts:contacts});
 }
 function migrateLeadStatusV9(lead){
@@ -327,7 +330,7 @@ function fmtDateShort(iso){
   catch(_){return iso;}
 }
 function uid(p){return p+"_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);}
-function makeContact(o){return Object.assign({id:uid("c"),name:"",title:"",email:"",phone:"",linkedin:"",notes:"",lastContacted:"",role:"unknown",relationships:[]},o||{});}
+function makeContact(o){return Object.assign({id:uid("c"),name:"",title:"",email:"",phone:"",linkedin:"",notes:"",lastContacted:"",role:"unknown",relationships:[],photo_url:null,twitter_url:null,github_url:null,headline:null,email_status:null},o||{});}
 function makeLead(data,weights){
   return {id:uid("lead"),aiPitch:"",createdAt:new Date().toISOString(),
     leadType:"prospect",
