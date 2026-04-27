@@ -439,6 +439,8 @@ function extractDomain(text){
 
 /* ── STEP 20C2: ENRICHMENT USAGE TRACKING ────────────────────────────────────── */
 var ENRICH_LIMITS={apollo:{contacts:50,exports_today:5},hunter:{searches:25},clay:{credits:100}};
+var ENRICH_PLANS=["free","pro","enterprise"];
+function _defaultPlans(){return{apollo:"free",hunter:"free",clay:"free"};}
 function getEnrichmentUsage(){
   var now=new Date();
   var month=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
@@ -447,19 +449,30 @@ function getEnrichmentUsage(){
     var raw=localStorage.getItem("pcrm_v9_enrichment_usage");
     var u=raw?JSON.parse(raw):null;
     if(!u||u.month!==month){
-      u={month:month,apollo:{contacts:0,exports_today:0,export_date:today},hunter:{searches:0},clay:{credits:0}};
+      u={month:month,plans:(u&&u.plans)||_defaultPlans(),apollo:{contacts:0,exports_today:0,export_date:today},hunter:{searches:0},clay:{credits:0}};
     } else if(u.apollo.export_date!==today){
       u.apollo.exports_today=0;u.apollo.export_date=today;
     }
+    if(!u.plans)u.plans=_defaultPlans();
     return u;
-  }catch(e){return{month:month,apollo:{contacts:0,exports_today:0,export_date:today},hunter:{searches:0},clay:{credits:0}};}
+  }catch(e){return{month:month,plans:_defaultPlans(),apollo:{contacts:0,exports_today:0,export_date:today},hunter:{searches:0},clay:{credits:0}};}
 }
 function saveEnrichmentUsage(u){try{localStorage.setItem("pcrm_v9_enrichment_usage",JSON.stringify(u));}catch(e){}}
 function incrementEnrichUsage(provider,field){
   var u=getEnrichmentUsage();
   if(u[provider]&&field in u[provider]){u[provider][field]=(u[provider][field]||0)+1;saveEnrichmentUsage(u);}
 }
+function getEnrichPlan(provider){var u=getEnrichmentUsage();return(u.plans&&u.plans[provider])||"free";}
+function setEnrichPlan(provider,plan){
+  if(ENRICH_PLANS.indexOf(plan)<0)plan="free";
+  var u=getEnrichmentUsage();
+  if(!u.plans)u.plans=_defaultPlans();
+  u.plans[provider]=plan;
+  saveEnrichmentUsage(u);
+}
+function isPaidEnrichPlan(provider){var p=getEnrichPlan(provider);return p==="pro"||p==="enterprise";}
 function isEnrichLimitReached(provider){
+  if(isPaidEnrichPlan(provider))return false;
   var u=getEnrichmentUsage();
   if(provider==="apollo")return u.apollo.contacts>=(ENRICH_LIMITS.apollo.contacts);
   if(provider==="hunter")return u.hunter.searches>=(ENRICH_LIMITS.hunter.searches);
@@ -476,7 +489,7 @@ async function enrichViaClay(domain,firstName,lastName,backendKey){
     var resp=await fetch("https://pink-sprint-trek-beds.trycloudflare.com/api/enrich/clay",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},
-      body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName,clayKey:clayKey})
+      body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName,clayKey:clayKey,plan:getEnrichPlan("clay")})
     });
     if(!resp.ok)return null;
     var data=await resp.json();
@@ -498,7 +511,7 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey){
   var apolloOk=apolloKey&&!isEnrichLimitReached("apollo");
   if(apolloOk){
     try{
-      var aResp=await fetch("https://pink-sprint-trek-beds.trycloudflare.com/api/enrich/apollo",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName,apolloKey:apolloKey})});
+      var aResp=await fetch("https://pink-sprint-trek-beds.trycloudflare.com/api/enrich/apollo",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName,apolloKey:apolloKey,plan:getEnrichPlan("apollo")})});
       if(aResp.ok){var aData=await aResp.json();if(aData.success&&aData.data){incrementEnrichUsage("apollo","contacts");result.companyData=aData.data;result.companySource="apollo";if(aData.data.email){result.email=aData.data.email;result.name=aData.data.name||null;result.title=aData.data.title||null;result.source="apollo";}}}
     }catch(e){}
   }
@@ -516,7 +529,7 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey){
         var hunterOk=hKey&&!isEnrichLimitReached("hunter");
         if(hunterOk){
           try{
-            var hResp=await fetch("https://pink-sprint-trek-beds.trycloudflare.com/api/enrich/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"email-finder",domain:domain,firstName:firstName,lastName:lastName,hunterApiKey:hKey})});
+            var hResp=await fetch("https://pink-sprint-trek-beds.trycloudflare.com/api/enrich/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"email-finder",domain:domain,firstName:firstName,lastName:lastName,hunterApiKey:hKey,plan:getEnrichPlan("hunter")})});
             if(hResp.ok){var hData=await hResp.json();if(hData.success&&hData.email){incrementEnrichUsage("hunter","searches");result.email=hData.email;result.source="hunter";}}
           }catch(e){}
         }
