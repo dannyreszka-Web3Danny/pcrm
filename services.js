@@ -457,29 +457,27 @@ function isEnrichLimitReached(provider){
 }
 
 /* ── STEP 20C2: CLAY ENRICHMENT ───────────────────────────────────────────────── */
-async function enrichViaClay(domain,firstName,lastName){
+/* Proxied through backend — never call Clay directly from the browser (CORS). */
+async function enrichViaClay(domain,firstName,lastName,backendKey){
   var clayKey=localStorage.getItem("pcrm_v9_clay_key")||"";
   if(!clayKey||isEnrichLimitReached("clay"))return null;
   try{
-    var body={domain:domain};
-    if(firstName)body.first_name=firstName;
-    if(lastName)body.last_name=lastName;
-    var resp=await fetch("https://api.clay.com/v1/sources/people-search",{
+    var resp=await fetch("http://178.104.168.218:3000/api/enrich/clay",{
       method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+clayKey},
-      body:JSON.stringify(body)
+      headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},
+      body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName,clayKey:clayKey})
     });
     if(!resp.ok)return null;
     var data=await resp.json();
+    if(!data.success||!data.data)return null;
     incrementEnrichUsage("clay","credits");
-    var person=(data.data&&data.data[0])||data;
-    if(!person||(!person.email&&!person.first_name))return null;
-    return{email:person.email||null,name:(person.first_name&&person.last_name)?person.first_name+" "+person.last_name:(person.first_name||person.last_name||null),title:person.title||null,source:"clay"};
+    return{email:data.data.email||null,name:data.data.name||null,title:data.data.title||null,source:"clay"};
   }catch(e){return null;}
 }
 
 /* ── STEP 20C2: ENRICHMENT WATERFALL ─────────────────────────────────────────── */
 /* Waterfall: Apollo → Clay (company data); Apollo → Hunter → Clay (email) */
+/* All external API calls proxied through backend at 178.104.168.218:3000 — never call Apollo, Hunter, or Clay directly from the browser. */
 async function enrichWaterfall(domain,firstName,lastName,backendKey){
   var result={email:null,name:null,title:null,source:null,companyData:null,companySource:null};
   /* Company data: Apollo first, Clay second */
@@ -487,12 +485,12 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey){
   var apolloOk=apolloKey&&!isEnrichLimitReached("apollo");
   if(apolloOk){
     try{
-      var aResp=await fetch("http://178.104.168.218:3000/apollo-search",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName})});
+      var aResp=await fetch("http://178.104.168.218:3000/api/enrich/apollo",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({domain:domain,firstName:firstName,lastName:lastName,apolloKey:apolloKey})});
       if(aResp.ok){var aData=await aResp.json();if(aData.success&&aData.data){incrementEnrichUsage("apollo","contacts");result.companyData=aData.data;result.companySource="apollo";if(aData.data.email){result.email=aData.data.email;result.name=aData.data.name||null;result.title=aData.data.title||null;result.source="apollo";}}}
     }catch(e){}
   }
   if(!result.companyData){
-    var clayCompany=await enrichViaClay(domain,firstName,lastName);
+    var clayCompany=await enrichViaClay(domain,firstName,lastName,backendKey);
     if(clayCompany){result.companyData=clayCompany;result.companySource="clay";if(clayCompany.email&&!result.email){result.email=clayCompany.email;result.name=clayCompany.name||null;result.title=clayCompany.title||null;result.source="clay";}}
   }
   /* Email: Apollo already checked → Hunter second → Clay third */
@@ -501,12 +499,12 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey){
     var hunterOk=hKey&&!isEnrichLimitReached("hunter");
     if(hunterOk){
       try{
-        var hResp=await fetch("http://178.104.168.218:3000/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"email-finder",domain:domain,firstName:firstName,lastName:lastName,hunterApiKey:hKey})});
+        var hResp=await fetch("http://178.104.168.218:3000/api/enrich/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"email-finder",domain:domain,firstName:firstName,lastName:lastName,hunterApiKey:hKey})});
         if(hResp.ok){var hData=await hResp.json();if(hData.success&&hData.email){incrementEnrichUsage("hunter","searches");result.email=hData.email;result.source="hunter";}}
       }catch(e){}
     }
     if(!result.email){
-      var clayEmail=await enrichViaClay(domain,firstName,lastName);
+      var clayEmail=await enrichViaClay(domain,firstName,lastName,backendKey);
       if(clayEmail&&clayEmail.email){result.email=clayEmail.email;result.name=result.name||clayEmail.name||null;result.title=result.title||clayEmail.title||null;result.source="clay";}
     }
   }
