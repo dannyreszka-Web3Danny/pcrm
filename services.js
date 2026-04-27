@@ -2,6 +2,17 @@
 /* Extracted from var code string. Plain JS only — no JSX, no React.            */
 /* Loaded before the Babel-compiled code block.                                  */
 
+/* Shared backend secret. Must match PCRM_API_SECRET on the server. */
+/* Pinned in localStorage so every fetch and the Settings panel pick it up. */
+(function(){
+  try{
+    if(typeof localStorage==="undefined")return;
+    var KEY="pcrm_v9_backend_key";
+    var EXPECTED="pcrm-secret-2026";
+    if(localStorage.getItem(KEY)!==EXPECTED)localStorage.setItem(KEY,EXPECTED);
+  }catch(_){}
+})();
+
 function fmtK(v,cur){
   if(!v&&v!==0)return"—";
   if(v>=1000000)return(cur||"")+Math.round(v/100000)/10+"M";
