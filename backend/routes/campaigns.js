@@ -161,6 +161,58 @@ router.post('/:id/pause', async (req, res) => {
   }
 });
 
+router.post('/:id/start-research', async (req, res) => {
+  const n8nUrl = process.env.N8N_CAMPAIGN_WEBHOOK_URL || '';
+  const reqId = `research-${req.params.id}-${Date.now()}`;
+
+  try {
+    const result = await enqueue(reqId, 'START_RESEARCH', `id=${req.params.id}`, () => {
+      const campaigns = readCampaigns();
+      const idx = campaigns.findIndex(c => c.id === req.params.id);
+      if (idx === -1) throw Object.assign(new Error('Campaign not found'), { statusCode: 404 });
+      if (campaigns[idx].status === 'running') throw Object.assign(new Error('Campaign already running'), { statusCode: 409 });
+      campaigns[idx] = {
+        ...campaigns[idx],
+        status: 'running',
+        currentStep: 'research',
+        lastRunAt: new Date().toISOString(),
+        apolloError: null,
+      };
+      writeCampaigns(campaigns);
+      return campaigns[idx];
+    });
+
+    let n8nTriggered = false;
+    if (n8nUrl) {
+      const { apolloApiKey, userEmail } = req.body;
+      fetch(n8nUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: result.id,
+          criteria: result.criteria || {},
+          userEmail: userEmail || '',
+          apolloApiKey: apolloApiKey || '',
+          requestId: reqId,
+          updatedAt: new Date().toISOString(),
+          source: 'n8n',
+          payloadType: 'campaign_start',
+        }),
+      }).catch(err => {
+        console.error('n8n campaign webhook failed:', err.message);
+      });
+      n8nTriggered = true;
+    } else {
+      console.warn('N8N_CAMPAIGN_WEBHOOK_URL not set — campaign started but n8n not triggered');
+    }
+
+    res.json({ success: true, data: result, n8nTriggered });
+  } catch (err) {
+    const status = err.statusCode || 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/:id/reset', async (req, res) => {
   const reqId = `reset-${req.params.id}-${Date.now()}`;
 
