@@ -2,19 +2,16 @@ const express = require('express');
 const router = express.Router();
 
 // POST /api/enrich/apollo
-// Body: { domain, firstName, lastName, apolloKey }
+// Body: { domain, apolloKey }
 router.post('/apollo', async (req, res) => {
-  const { domain, firstName, lastName, apolloKey } = req.body;
+  const { domain, apolloKey } = req.body;
   if (!apolloKey) return res.status(400).json({ success: false, error: 'apolloKey is required' });
-  if (!domain && !firstName && !lastName) return res.status(400).json({ success: false, error: 'domain or name is required' });
+  if (!domain) return res.status(400).json({ success: false, error: 'domain is required' });
 
   try {
-    const payload = {};
-    if (firstName) payload.first_name = firstName;
-    if (lastName) payload.last_name = lastName;
-    if (domain) payload.organization_domains = [domain];
+    const payload = { q_organization_domains: [domain], page: 1, per_page: 5 };
 
-    const response = await fetch('https://api.apollo.io/v1/people/match', {
+    const response = await fetch('https://api.apollo.io/v1/mixed_people/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': apolloKey },
       body: JSON.stringify(payload),
@@ -26,7 +23,7 @@ router.post('/apollo', async (req, res) => {
       return res.status(response.status).json({ success: false, error: data.error || 'Apollo API error' });
     }
 
-    const person = data.person;
+    const person = (data.people && data.people[0]) || null;
     if (!person) {
       return res.json({ success: false, error: 'No person found' });
     }
