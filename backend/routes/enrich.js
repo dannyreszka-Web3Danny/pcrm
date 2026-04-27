@@ -9,12 +9,10 @@ router.post('/apollo', async (req, res) => {
   if (!domain) return res.status(400).json({ success: false, error: 'domain is required' });
 
   try {
-    const payload = { q_organization_domains: [domain], page: 1, per_page: 5 };
-
-    const response = await fetch('https://api.apollo.io/v1/mixed_people/search', {
+    const response = await fetch('https://api.apollo.io/v1/organizations/enrich', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': apolloKey },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ domain }),
     });
 
     const data = await response.json();
@@ -23,20 +21,23 @@ router.post('/apollo', async (req, res) => {
       return res.status(response.status).json({ success: false, error: data.error || 'Apollo API error' });
     }
 
-    const person = (data.people && data.people[0]) || null;
-    if (!person) {
-      return res.json({ success: false, error: 'No person found' });
+    const org = data.organization || null;
+    if (!org) {
+      return res.json({ success: false, error: 'No organization found' });
     }
 
-    const org = (person.employment_history && person.employment_history[0]) || {};
     return res.json({
       success: true,
       data: {
-        email: person.email || null,
-        name: [person.first_name, person.last_name].filter(Boolean).join(' ') || null,
-        title: person.title || null,
-        company: person.organization_name || org.organization_name || null,
-        linkedin_url: person.linkedin_url || null,
+        email: null,
+        name: null,
+        title: null,
+        company: org.name || null,
+        domain: org.primary_domain || domain,
+        industry: org.industry || null,
+        employees: org.estimated_num_employees || null,
+        linkedin_url: org.linkedin_url || null,
+        website: org.website_url || null,
       },
     });
   } catch (err) {
