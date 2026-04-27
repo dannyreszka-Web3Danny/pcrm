@@ -2,10 +2,13 @@ const express = require('express');
 const router = express.Router();
 
 router.post('/', async (req, res) => {
-  const { type, domain, firstName, lastName, requestId, hunterApiKey } = req.body;
+  const { type, domain, firstName, lastName, requestId, hunterApiKey, plan } = req.body;
   if (!requestId) return res.status(400).json({ success: false, error: 'requestId is required' });
   if (!domain) return res.status(400).json({ success: false, error: 'domain is required' });
   if (!hunterApiKey) return res.status(400).json({ success: false, error: 'hunterApiKey is required' });
+
+  const isPaid = plan === 'pro' || plan === 'enterprise';
+  const domainLimit = isPaid ? 100 : 10;
 
   try {
     if (type === 'email-finder') {
@@ -38,8 +41,8 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Default: domain-search
-    const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(hunterApiKey)}&limit=10`;
+    // Default: domain-search. Free → limit=10, Pro/Enterprise → limit=100.
+    const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(hunterApiKey)}&limit=${domainLimit}`;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -47,7 +50,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: data.errors[0].details || 'Hunter.io error' });
     }
 
-    const contacts = (data.data?.emails || []).slice(0, 10).map(e => ({
+    const contacts = (data.data?.emails || []).slice(0, domainLimit).map(e => ({
       firstName: e.first_name || '',
       lastName: e.last_name || '',
       email: e.value || '',
