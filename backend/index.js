@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const leadsRouter = require('./routes/leads');
 const campaignsRouter = require('./routes/campaigns');
 const healthRouter = require('./routes/health');
@@ -16,15 +17,13 @@ if (!API_SECRET) {
   process.exit(1);
 }
 
-app.use(express.json());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-pcrm-key', 'X-Api-Key']
+}));
 
-app.use(function(req, res, next) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-pcrm-key');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+app.use(express.json());
 
 // Public tracking pixel — no auth required
 app.use('/track', trackingRouter);
