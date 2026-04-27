@@ -478,7 +478,9 @@ async function enrichViaClay(domain,firstName,lastName,backendKey){
 /* ── STEP 20C2: ENRICHMENT WATERFALL ─────────────────────────────────────────── */
 /* Waterfall: Apollo → Clay (company data); Apollo → Hunter → Clay (email) */
 /* All external API calls proxied through backend at 178.104.168.218:3000 — never call Apollo, Hunter, or Clay directly from the browser. */
+function getWaterfallOrder(){try{var o=JSON.parse(localStorage.getItem("pcrm_v9_enrichment_order")||"null");if(Array.isArray(o)&&o.length>0)return o;}catch(e){}return["apollo","hunter","clay"];}
 async function enrichWaterfall(domain,firstName,lastName,backendKey){
+  var wfOrder=getWaterfallOrder();
   var result={email:null,name:null,title:null,source:null,companyData:null,companySource:null};
   /* Company data: Apollo first, Clay second */
   var apolloKey=localStorage.getItem("pcrm_v9_apollo_key")||"";
@@ -493,19 +495,24 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey){
     var clayCompany=await enrichViaClay(domain,firstName,lastName,backendKey);
     if(clayCompany){result.companyData=clayCompany;result.companySource="clay";if(clayCompany.email&&!result.email){result.email=clayCompany.email;result.name=clayCompany.name||null;result.title=clayCompany.title||null;result.source="clay";}}
   }
-  /* Email: Apollo already checked → Hunter second → Clay third */
+  /* Email: Apollo already checked, then try remaining providers in configured waterfall order */
   if(!result.email){
-    var hKey=localStorage.getItem("pcrm_v9_hunter_key")||"";
-    var hunterOk=hKey&&!isEnrichLimitReached("hunter");
-    if(hunterOk){
-      try{
-        var hResp=await fetch("http://178.104.168.218:3000/api/enrich/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"email-finder",domain:domain,firstName:firstName,lastName:lastName,hunterApiKey:hKey})});
-        if(hResp.ok){var hData=await hResp.json();if(hData.success&&hData.email){incrementEnrichUsage("hunter","searches");result.email=hData.email;result.source="hunter";}}
-      }catch(e){}
-    }
-    if(!result.email){
-      var clayEmail=await enrichViaClay(domain,firstName,lastName,backendKey);
-      if(clayEmail&&clayEmail.email){result.email=clayEmail.email;result.name=result.name||clayEmail.name||null;result.title=result.title||clayEmail.title||null;result.source="clay";}
+    var _emailOrder=wfOrder.filter(function(p){return p!=="apollo";});
+    for(var _ei=0;_ei<_emailOrder.length&&!result.email;_ei++){
+      var _ep=_emailOrder[_ei];
+      if(_ep==="hunter"){
+        var hKey=localStorage.getItem("pcrm_v9_hunter_key")||"";
+        var hunterOk=hKey&&!isEnrichLimitReached("hunter");
+        if(hunterOk){
+          try{
+            var hResp=await fetch("http://178.104.168.218:3000/api/enrich/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"email-finder",domain:domain,firstName:firstName,lastName:lastName,hunterApiKey:hKey})});
+            if(hResp.ok){var hData=await hResp.json();if(hData.success&&hData.email){incrementEnrichUsage("hunter","searches");result.email=hData.email;result.source="hunter";}}
+          }catch(e){}
+        }
+      } else if(_ep==="clay"){
+        var clayEmail=await enrichViaClay(domain,firstName,lastName,backendKey);
+        if(clayEmail&&clayEmail.email){result.email=clayEmail.email;result.name=result.name||clayEmail.name||null;result.title=result.title||clayEmail.title||null;result.source="clay";}
+      }
     }
   }
   return result;
