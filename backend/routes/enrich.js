@@ -9,14 +9,14 @@ router.post('/apollo', async (req, res) => {
   if (!domain && !firstName && !lastName) return res.status(400).json({ success: false, error: 'domain or name is required' });
 
   try {
-    const payload = { api_key: apolloKey };
+    const payload = {};
     if (firstName) payload.first_name = firstName;
     if (lastName) payload.last_name = lastName;
     if (domain) payload.organization_domains = [domain];
 
     const response = await fetch('https://api.apollo.io/v1/people/match', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': apolloKey },
       body: JSON.stringify(payload),
     });
 
