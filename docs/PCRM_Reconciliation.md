@@ -2353,66 +2353,73 @@ Show verification status on each contact email:
 
 ---
 
-SEND TO CLAUDE CODE — STEP 20C2 (Clay Integration and Enrichment Waterfall)
+SEND TO CLAUDE CODE — STEP 20C2 (Clay.com Integration
+and Enrichment Waterfall Logic)
 
-Add Clay.com to the integrations hub alongside Apollo and
-Hunter.io as the third provider in the enrichment stack.
+Add Clay.com as the third enrichment provider and
+implement a smart waterfall logic that uses all three
+providers — Apollo, Hunter.io, and Clay — efficiently
+without wasting free tier limits.
+
+Clay.com is a data enrichment platform that waterfall
+searches multiple data providers simultaneously and
+returns the best result. It is more powerful than
+Apollo or Hunter.io alone but has lower free tier
+limits (100 credits/month).
+
+Add Clay API key field to Settings integrations hub
+under pcrm_v9_clay_key.
+
+WATERFALL LOGIC — implement this exact order:
+
+For finding company data:
+  1. Apollo first — most generous free tier for company data
+  2. Clay second — only if Apollo returns no result
+
+For finding email addresses:
+  1. Apollo first — check if Apollo already returned email
+  2. Hunter.io second — only if Apollo has no email or
+     email is unverified
+  3. Clay third — only if both Apollo and Hunter failed
+
+For verifying email addresses:
+  1. Hunter.io first — best email verification
+  2. Clay second — only if Hunter.io monthly limit reached
+
+USAGE TRACKING — track monthly usage per provider:
+  Store in pcrm_v9_enrichment_usage in localStorage:
+  {
+    apollo: { contacts: 0, exports: 0, month: "2026-04" },
+    hunter: { searches: 0, month: "2026-04" },
+    clay: { credits: 0, month: "2026-04" }
+  }
+  Reset counts when month changes.
+
+FREE TIER LIMITS — stop calling API when limit reached:
+  Apollo: 50 contacts/month, 5 exports/day
+  Hunter.io: 25 searches/month
+  Clay: 100 credits/month
+
+When a provider limit is reached:
+  - Skip that provider in the waterfall
+  - Show a warning badge in the integrations hub:
+    "Apollo: 47/50 contacts used this month"
+  - Never call a paid endpoint if limit is reached
+  - Mark enrichment result as "partial — [provider]
+    limit reached" so the user knows data may be
+    incomplete
+
+Show usage meters in the Settings integrations hub
+for all three providers — a small progress bar showing
+how much of the monthly free tier has been used.
 
 Clay endpoint: https://api.clay.com/v1
-Store key in pcrm_v9_clay_key.
+Store Clay API key in pcrm_v9_clay_key.
 
-Enrichment waterfall logic:
-
-  Company data:
-    1. Apollo first
-    2. Clay second if Apollo returns nothing
-
-  Email addresses:
-    1. Apollo first
-    2. Hunter.io second if Apollo has no verified email
-    3. Clay third if both Apollo and Hunter fail
-
-  Email verification:
-    1. Hunter.io first
-    2. Clay second if Hunter monthly limit reached
-
-Monthly usage tracking:
-
-  Track usage in localStorage under pcrm_v9_enrichment_usage
-  with the following shape:
-    {
-      month: "YYYY-MM",
-      apollo:  { contacts: 0, exports_today: 0, export_date: "YYYY-MM-DD" },
-      hunter:  { searches: 0 },
-      clay:    { credits: 0 }
-    }
-
-  Free tier limits:
-    - apollo: 50 contacts per month, 5 exports per day
-    - hunter: 25 searches per month
-    - clay:   100 credits per month
-
-  Reset counts when the stored month value differs from the
-  current month. Reset apollo.exports_today when export_date
-  differs from today.
-
-Limit handling:
-  - When a provider's limit is reached, skip that provider
-    in the waterfall and continue with the next one.
-  - Show a warning badge on the provider card in the
-    integrations hub when its limit is reached.
-  - Show usage meters as progress bars in Settings for each
-    provider (current / limit), colour-coded:
-      green   < 70%
-      yellow  70%–95%
-      red     ≥ 95% or limit reached.
-
-Do not change Apollo or Hunter.io behaviour beyond inserting
-Clay into the waterfall and wiring the usage counters.
+Update CLAUDE.md with the waterfall logic as a
+protected architecture rule.
 
 ---
-
-SEND TO CLAUDE CODE — STEP 20D (Intent-Based Timing)
 
 Wire the existing signals array to trigger campaign
 outreach automatically when buying intent signals appear.
@@ -2652,6 +2659,95 @@ Make a change on your iPhone and verify it appears on
 your MacBook within 90 seconds. Make a change on your
 MacBook and verify it appears on your iPhone. Verify
 the app opens correctly when offline.
+
+---
+
+### SESSION 7B — LINKEDIN CHROME EXTENSION
+
+This session builds a small Chrome extension that lets
+you pull contact data from any LinkedIn profile directly
+into your PCRM with one click. This saves API credits
+by capturing data manually when you are already browsing
+LinkedIn, and automatically triggers Hunter.io to find
+the email from the company domain.
+
+---
+
+SEND TO CLAUDE CODE — STEP 22B (LinkedIn Chrome Extension)
+
+Build a Chrome browser extension called PCRM LinkedIn
+Clipper as a separate folder called chrome-extension
+in the project root.
+
+The extension has four files:
+
+manifest.json — Chrome extension manifest v3. Name:
+PCRM LinkedIn Clipper. Permissions: activeTab,
+storage. Content scripts run on linkedin.com/* pages.
+
+content.js — Runs on every LinkedIn profile page.
+Reads the following visible page elements:
+  - Full name from the h1 element
+  - Current title from the primary subtitle
+  - Current company from the experience section
+  - Location from the location element
+  - LinkedIn URL from window.location.href
+  - About/headline text if visible
+  - Profile photo URL if visible
+
+Sends the extracted data to the extension popup
+via chrome.runtime.sendMessage.
+
+popup.html and popup.js — A small popup showing:
+  - Extracted name, title, company, LinkedIn URL
+  - A PCRM URL field (editable, saved to storage)
+  - A PCRM API Key field (editable, saved to storage)
+  - A Save to PCRM button
+  - Status message showing success or error
+
+When Save to PCRM is clicked:
+  1. POST the contact data to the PCRM backend at
+     the user's configured PCRM URL plus /api/contacts
+  2. Include x-pcrm-key header with the stored API key
+  3. The backend creates or updates the contact on
+     the matching lead (matched by company domain)
+  4. If no matching lead exists create a new lead
+     with the company name and add the contact
+  5. After saving automatically trigger Hunter.io
+     enrichment on the contact to find their email
+     from the company domain
+  6. Show success: Saved to PCRM — email lookup started
+
+The popup also shows a visual indicator when on a
+LinkedIn profile page versus other pages.
+
+Add a new backend endpoint POST /api/contacts that:
+  - Accepts: name, title, company, linkedinUrl,
+    photoUrl, location, headline
+  - Finds existing lead by company name match
+  - If found: adds contact to that lead's contacts array
+  - If not found: creates new lead with company name
+    and adds contact
+  - Triggers Hunter.io domain search for the contact
+  - Returns the lead ID and contact ID
+
+Store the extension in /chrome-extension folder.
+Include a README.md explaining how to install it
+in Chrome via Developer mode.
+
+Do not change any existing PCRM functionality.
+The backend endpoint is purely additive.
+
+---
+
+TEST BEFORE CONTINUING — Install the extension in
+Chrome via Developer mode (chrome://extensions →
+Load unpacked → select chrome-extension folder).
+Visit a LinkedIn profile. Click the extension icon.
+Verify the name, title, and company are pre-filled.
+Click Save to PCRM and verify the contact appears
+in your PCRM on the correct lead or as a new lead.
+Verify Hunter.io runs automatically to find the email.
 
 ---
 
