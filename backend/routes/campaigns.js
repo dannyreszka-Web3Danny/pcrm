@@ -197,6 +197,7 @@ router.post('/:id/start-research', async (req, res) => {
           criteria: result.criteria || {},
           userEmail: userEmail || '',
           apolloApiKey: apolloApiKey || '',
+          backendApiKey: process.env.PCRM_API_SECRET || '',
           requestId: reqId,
           updatedAt: new Date().toISOString(),
           source: 'n8n',
