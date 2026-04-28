@@ -7,6 +7,7 @@ const healthRouter = require('./routes/health');
 const hunterRouter = require('./routes/hunter');
 const enrichRouter = require('./routes/enrich');
 const trackingRouter = require('./routes/tracking');
+const contactsRouter = require('./routes/contacts');
 
 const app = express();
 const PORT = 3000;
@@ -41,6 +42,7 @@ app.use('/campaigns', campaignsRouter);
 app.use('/health', healthRouter);
 app.use('/hunter', hunterRouter);
 app.use('/api/enrich', enrichRouter);
+app.use('/api/contacts', contactsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

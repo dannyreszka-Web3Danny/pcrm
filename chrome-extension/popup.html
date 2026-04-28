@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PCRM LinkedIn Clipper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      background: #0f1117;
+      color: #e0e0e0;
+      width: 340px;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .header-dot {
+      width: 8px; height: 8px;
+      background: #0BE881;
+      border-radius: 50%;
+    }
+    .header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #666;
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+    .profile-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .profile-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .profile-photo {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #2a2d3a;
+      flex-shrink: 0;
+    }
+    .profile-photo-placeholder {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: #2a2d3a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .profile-info { flex: 1; min-width: 0; }
+    .profile-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .profile-title {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .profile-company {
+      font-size: 12px;
+      color: #48DBFB;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .field-group { margin-bottom: 8px; }
+    label {
+      display: block;
+      font-size: 10px;
+      color: #888;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    input, textarea {
+      width: 100%;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 12px;
+      padding: 6px 8px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus { border-color: #48DBFB; }
+    textarea { resize: none; height: 50px; }
+    .divider {
+      border: none;
+      border-top: 1px solid #2a2d3a;
+      margin: 12px 0;
+    }
+    .settings-row { display: flex; gap: 8px; align-items: flex-start; }
+    .settings-row .field-group { flex: 1; }
+    .btn-save {
+      width: 100%;
+      background: #0BE881;
+      color: #0f1117;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 0;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      margin-top: 4px;
+    }
+    .btn-save:hover { opacity: 0.88; }
+    .btn-save:disabled { opacity: 0.45; cursor: not-allowed; }
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+    }
+    #status.ok { color: #0BE881; }
+    #status.err { color: #FF5A5F; }
+    #status.info { color: #aaa; }
+    .not-linkedin {
+      text-align: center;
+      padding: 24px 0;
+      color: #888;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-dot"></div>
+    <h2>PCRM LinkedIn Clipper</h2>
+  </div>
+
+  <div id="main">
+    <div id="not-linkedin" class="not-linkedin" style="display:none">
+      Open a LinkedIn profile page<br>(<code>linkedin.com/in/…</code>) to clip it.
+    </div>
+
+    <div id="profile-section" style="display:none">
+      <div class="profile-card">
+        <div class="profile-row">
+          <div id="photo-wrap">
+            <div class="profile-photo-placeholder">👤</div>
+          </div>
+          <div class="profile-info">
+            <div class="profile-name" id="disp-name">—</div>
+            <div class="profile-title" id="disp-title">—</div>
+            <div class="profile-company" id="disp-company">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label">Profile Fields</div>
+      <div class="field-group">
+        <label>Name</label>
+        <input type="text" id="f-name" placeholder="Full name" />
+      </div>
+      <div class="field-group">
+        <label>Title / Headline</label>
+        <input type="text" id="f-title" placeholder="Job title" />
+      </div>
+      <div class="field-group">
+        <label>Company</label>
+        <input type="text" id="f-company" placeholder="Company name" />
+      </div>
+      <div class="field-group">
+        <label>Location</label>
+        <input type="text" id="f-location" placeholder="Location" />
+      </div>
+      <div class="field-group">
+        <label>LinkedIn URL</label>
+        <input type="text" id="f-linkedin" readonly />
+      </div>
+
+      <hr class="divider" />
+
+      <div class="section-label">PCRM Connection</div>
+      <div class="field-group">
+        <label>PCRM URL</label>
+        <input type="text" id="f-pcrm-url" placeholder="http://localhost:3000" />
+      </div>
+      <div class="field-group">
+        <label>API Key</label>
+        <input type="password" id="f-api-key" placeholder="Your PCRM API key" />
+      </div>
+
+      <button class="btn-save" id="btn-save">Save to PCRM</button>
+      <div id="status" class="info"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
