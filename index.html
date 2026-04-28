@@ -178,10 +178,12 @@
     /* PASS 1: Components (~200KB) */
     var src1=window.__pcrmCore+"\n"+window.__pcrmPanels+"\n"+window.__pcrmAI+"\n"+window.__pcrmFeatures;
     eval(Babel.transform(src1,{presets:["react"]}).code);
-    /* PASS 2: Tabs + App (~310KB) */
+    /* PASS 2: Tabs + App (without DealRoom — kept under Babel's 500KB pretty-print threshold) */
     var inj="var ScoreBadge=window.__C.ScoreBadge,PipeBadge=window.__C.PipeBadge,PipeBar=window.__C.PipeBar,Sparkline=window.__C.Sparkline,Tag=window.__C.Tag,PomodoroTimer=window.__C.PomodoroTimer,ReminderBanner=window.__C.ReminderBanner,ReminderCard=window.__C.ReminderCard,MilestonePanel=window.__C.MilestonePanel,PipelineHistory=window.__C.PipelineHistory,ContactsEditor=window.__C.ContactsEditor,BlockerPanel=window.__C.BlockerPanel,DealRoom=window.__C.DealRoom,CompanyPanel=window.__C.CompanyPanel,LeadForm=window.__C.LeadForm,ExportPanel=window.__C.ExportPanel,GlobalMicPanel=window.__C.GlobalMicPanel,ReplyClassifier=window.__C.ReplyClassifier,SmartNextAction=window.__C.SmartNextAction,MeetingPrepCard=window.__C.MeetingPrepCard,ContactQueue=window.__C.ContactQueue,EODSummary=window.__C.EODSummary,DailyBriefing=window.__C.DailyBriefing,ReActivationPanel=window.__C.ReActivationPanel,HotLeadPanel=window.__C.HotLeadPanel,NextStepWidget=window.__C.NextStepWidget,SubActionsWidget=window.__C.SubActionsWidget,ActionPanel=window.__C.ActionPanel,BurgerIcon=window.__C.BurgerIcon,EditIcon=window.__C.EditIcon,DealMindMap=window.__C.DealMindMap,ExecutionGraph=window.__C.ExecutionGraph,SignatureBuilder=window.__C.SignatureBuilder,buildSignatureHtml=window.__C.buildSignatureHtml,SystemHealthPanel=window.__C.SystemHealthPanel,IntentSignalBanner=window.__C.IntentSignalBanner,ContactProfilePanel=window.__C.ContactProfilePanel;";
-    var src2=inj+"\n"+window.__pcrmTabLeads+"\n"+window.__pcrmTabOutreach+"\n"+window.__pcrmTabOther+"\n"+window.__pcrmTabDealroom+"\n"+window.__pcrmApp;
+    var src2=inj+"\n"+window.__pcrmTabLeads+"\n"+window.__pcrmTabOutreach+"\n"+window.__pcrmTabOther+"\n"+window.__pcrmApp;
     eval(Babel.transform(src2,{presets:["react"]}).code);
+    /* PASS 3: DealRoomTab standalone (only referenced via JSX in app.js, runs synchronously before React's first render) */
+    eval(Babel.transform(window.__pcrmTabDealroom,{presets:["react"]}).code);
   } catch(e){
     document.getElementById("root").innerHTML = "<pre style=\"color:#FF6B6B;padding:20px\">Error: " + e.message + "</pre>";
     console.error(e);
