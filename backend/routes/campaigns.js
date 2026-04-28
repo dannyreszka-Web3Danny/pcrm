@@ -188,7 +188,13 @@ router.post('/:id/start-research', async (req, res) => {
 
     let n8nTriggered = false;
     if (n8nUrl) {
-      const { apolloApiKey, userEmail } = req.body;
+      const {
+        apolloApiKey,
+        serperApiKey,
+        anthropicApiKey,
+        backendUrl,
+        userEmail,
+      } = req.body;
       fetch(n8nUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,6 +203,9 @@ router.post('/:id/start-research', async (req, res) => {
           criteria: result.criteria || {},
           userEmail: userEmail || '',
           apolloApiKey: apolloApiKey || '',
+          serperApiKey: serperApiKey || '',
+          anthropicApiKey: anthropicApiKey || '',
+          backendUrl: backendUrl || '',
           backendApiKey: process.env.PCRM_API_SECRET || '',
           requestId: reqId,
           updatedAt: new Date().toISOString(),
