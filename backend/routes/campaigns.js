@@ -26,15 +26,19 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { requestId, name, targetLeads, batchSize, step, ...rest } = req.body;
+  const { requestId, id: providedId, name, targetLeads, batchSize, step, ...rest } = req.body;
   if (!requestId) return res.status(400).json({ success: false, error: 'requestId is required' });
   if (!name) return res.status(400).json({ success: false, error: 'name is required' });
 
   try {
     const result = await enqueue(requestId, 'CREATE_CAMPAIGN', `name=${name}`, () => {
       const campaigns = readCampaigns();
+      if (providedId) {
+        const existing = campaigns.find(c => c.id === providedId);
+        if (existing) return existing;
+      }
       const campaign = {
-        id: uuidv4(),
+        id: providedId || uuidv4(),
         name,
         createdAt: new Date().toISOString(),
         status: 'draft',
