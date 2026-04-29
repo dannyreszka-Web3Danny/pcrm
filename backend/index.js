@@ -30,7 +30,12 @@ app.use(express.json());
 app.use('/track', trackingRouter);
 
 app.use(function requireApiKey(req, res, next) {
-  const key = req.headers['x-pcrm-key'];
+  // Header is the canonical auth path. The body fallback (backendApiKey) exists because
+  // some hosting layers (e.g. the Cloudflare free tunnel) can strip custom headers on
+  // certain requests. express.json() runs before this middleware, so req.body is parsed.
+  const headerKey = req.headers['x-pcrm-key'];
+  const bodyKey = req.body && req.body.backendApiKey;
+  const key = headerKey || bodyKey;
   if (!key || key !== API_SECRET) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
