@@ -191,7 +191,7 @@ router.post('/:id/start-research', async (req, res) => {
       const {
         apolloApiKey,
         serperApiKey,
-        anthropicApiKey,
+        groqApiKey,
         backendUrl,
         userEmail,
       } = req.body;
@@ -204,7 +204,7 @@ router.post('/:id/start-research', async (req, res) => {
           userEmail: userEmail || '',
           apolloApiKey: apolloApiKey || '',
           serperApiKey: serperApiKey || '',
-          anthropicApiKey: anthropicApiKey || '',
+          groqApiKey: groqApiKey || '',
           backendUrl: backendUrl || '',
           backendApiKey: process.env.PCRM_API_SECRET || '',
           requestId: reqId,
