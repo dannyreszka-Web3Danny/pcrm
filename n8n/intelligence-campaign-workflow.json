@@ -67,7 +67,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $execution.id + '-init', status: 'running', step: 'research', updatedAt: $json.updatedAt, source: 'n8n', payloadType: 'campaign_update' }) }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requestId: $execution.id + '-init', status: 'running', step: 'research', updatedAt: $json.updatedAt, source: 'n8n', payloadType: 'campaign_update' }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000004",
@@ -122,7 +123,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const kwParts = [].concat(Array.isArray(cr.industries) ? cr.industries : [], cr.keywords ? [cr.keywords] : []); return JSON.stringify({ page: 1, per_page: 25, person_titles: cr.jobTitles || [], person_locations: cr.geographies || [], q_organization_industry_tag_ids: cr.apolloIndustryIds || [], q_keywords: kwParts.join(' '), prospected_by_current_team: ['no'] }); })() }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const kwParts = [].concat(Array.isArray(cr.industries) ? cr.industries : [], cr.keywords ? [cr.keywords] : []); return JSON.stringify({ page: 1, per_page: 25, person_titles: cr.jobTitles || [], person_locations: cr.geographies || [], q_organization_industry_tag_ids: cr.apolloIndustryIds || [], q_keywords: kwParts.join(' '), prospected_by_current_team: ['no'] }); })() }}",
         "options": {
           "response": {
             "response": {
@@ -186,7 +188,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ q: $json.companyName + ' ' + ($json.industry || '') + ' company funding news hiring', num: 5 }) }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ q: $json.companyName + ' ' + ($json.industry || '') + ' company funding news hiring', num: 5 }) }}",
         "options": {
           "response": {
             "response": {
@@ -227,7 +230,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ (function() { const lead = $('Loop: Per Lead').item.json; const criteria = lead.criteria || {}; const serperResults = ($input.first().json.organic || []).slice(0, 3).map(r => r.title + ': ' + r.snippet).join('\\n'); const prompt = 'Score this lead 1-10 for fit against our ideal customer profile.\\n\\nICP Criteria:\\n- Industries: ' + (criteria.industries || []).join(', ') + '\\n- Geographies: ' + (criteria.geographies || []).join(', ') + '\\n- Job Titles: ' + (criteria.jobTitles || []).join(', ') + '\\n- Other: ' + (criteria.description || '') + '\\n\\nLead:\\n- Company: ' + lead.companyName + '\\n- Industry: ' + lead.industry + '\\n- Domain: ' + lead.domain + '\\n- Headcount: ' + lead.headcount + '\\n- Contact: ' + lead.personName + ' (' + lead.personTitle + ')\\n\\nRecent signals:\\n' + serperResults + '\\n\\nRespond with ONLY: Score: X/10. Reason: one sentence.'; return JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 80, messages: [{ role: 'user', content: prompt }] }); })() }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ (function() { const lead = $('Loop: Per Lead').item.json; const criteria = lead.criteria || {}; const serperResults = ($input.first().json.organic || []).slice(0, 3).map(r => r.title + ': ' + r.snippet).join('\\n'); const prompt = 'Score this lead 1-10 for fit against our ideal customer profile.\\n\\nICP Criteria:\\n- Industries: ' + (criteria.industries || []).join(', ') + '\\n- Geographies: ' + (criteria.geographies || []).join(', ') + '\\n- Job Titles: ' + (criteria.jobTitles || []).join(', ') + '\\n- Other: ' + (criteria.description || '') + '\\n\\nLead:\\n- Company: ' + lead.companyName + '\\n- Industry: ' + lead.industry + '\\n- Domain: ' + lead.domain + '\\n- Headcount: ' + lead.headcount + '\\n- Contact: ' + lead.personName + ' (' + lead.personTitle + ')\\n\\nRecent signals:\\n' + serperResults + '\\n\\nRespond with ONLY: Score: X/10. Reason: one sentence.'; return JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 80, messages: [{ role: 'user', content: prompt }] }); })() }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000010",
@@ -303,7 +307,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [{ name: $json.personName, title: $json.personTitle, email: $json.personEmail, phone: $json.personPhone, source: 'apollo' }], enrichment: { apolloScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'apollo_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [{ name: $json.personName, title: $json.personTitle, email: $json.personEmail, phone: $json.personPhone, source: 'apollo' }], enrichment: { apolloScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'apollo_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000013",
@@ -366,7 +371,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $json.leadRequestId + '-link', payloadType: 'lead_update', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, signals: [{ type: 'campaign_match', value: 'Matched by Intelligence Campaign (score: ' + $json.score + '/10)', strength: 'medium', at: new Date().toISOString() }] }) }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requestId: $json.leadRequestId + '-link', payloadType: 'lead_update', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, signals: [{ type: 'campaign_match', value: 'Matched by Intelligence Campaign (score: ' + $json.score + '/10)', strength: 'medium', at: new Date().toISOString() }] }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000014",
@@ -412,7 +418,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $execution.id + '-enrichment', payloadType: 'campaign_update', source: 'n8n', status: 'running', step: 'enrichment', updatedAt: new Date().toISOString() }) }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requestId: $execution.id + '-enrichment', payloadType: 'campaign_update', source: 'n8n', status: 'running', step: 'enrichment', updatedAt: new Date().toISOString() }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000016",
@@ -443,7 +450,8 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $execution.id + '-complete', payloadType: 'campaign_update', source: 'n8n', status: 'completed', step: 'ready_for_review', updatedAt: new Date().toISOString() }) }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requestId: $execution.id + '-complete', payloadType: 'campaign_update', source: 'n8n', status: 'completed', step: 'ready_for_review', updatedAt: new Date().toISOString() }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000017",
