@@ -124,7 +124,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const parts = []; if (Array.isArray(cr.industries)) for (const x of cr.industries) parts.push(x); if (Array.isArray(cr.geographies)) for (const x of cr.geographies) parts.push(x); if (cr.keywords) parts.push(cr.keywords); const q = parts.join(' ').trim() + ' companies'; return JSON.stringify({ q: q, num: 25 }); })() }}",
+        "jsonBody": "={{ JSON.stringify({ q: $json.searchQuery, num: 25 }) }}",
         "options": {
           "response": {
             "response": {
@@ -144,7 +144,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Process Serper organic results \u2014 normalise into per-company items.\n// Output items keep the same shape downstream nodes expect; contact\n// fields stay empty since Serper returns websites, not people \u2014\n// Hunter/Clay fill them in later when given a domain.\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst serperData = $input.first().json;\n\nconst existingLeads = (existingLeadsResp.data || []);\nconst organic = serperData.organic || [];\n\nconst SKIP_HOSTS = [\n  'linkedin.com','twitter.com','x.com','facebook.com','instagram.com','youtube.com','tiktok.com',\n  'wikipedia.org','crunchbase.com','glassdoor.com','indeed.com','zoominfo.com','rocketreach.co',\n  'bloomberg.com','reuters.com','nytimes.com','ft.com','forbes.com','businessinsider.com','techcrunch.com',\n  'medium.com','substack.com','quora.com','yelp.com','tripadvisor.com','google.com','youtube.com'\n];\n\nfunction cleanCompanyName(title) {\n  if (!title) return '';\n  let name = title.split(/\\s+[-|\u2014\u2013:]\\s+/)[0].trim();\n  name = name.replace(/\\b(home|homepage|about|about us|contact|careers|jobs|login|sign in|index)\\s*$/i, '').trim();\n  return name;\n}\n\nfunction extractHost(url) {\n  if (!url) return '';\n  try { return new URL(url).hostname.replace(/^www\\./, '').toLowerCase(); }\n  catch (e) { return ''; }\n}\n\nfunction isSkipped(host) {\n  if (!host) return true;\n  for (const h of SKIP_HOSTS) {\n    if (host === h || host.endsWith('.' + h)) return true;\n  }\n  return false;\n}\n\nconst seen = new Set();\nconst items = [];\nfor (let i = 0; i < organic.length; i++) {\n  const r = organic[i];\n  const host = extractHost(r.link);\n  if (isSkipped(host)) continue;\n  if (seen.has(host)) continue;\n  seen.add(host);\n  const companyName = cleanCompanyName(r.title);\n  if (!companyName || companyName.length < 2) continue;\n  items.push({\n    personName: '',\n    personTitle: '',\n    personEmail: '',\n    personPhone: '',\n    companyName: companyName,\n    domain: host,\n    website: r.link || '',\n    industry: '',\n    headcount: null,\n    fundingStage: '',\n    linkedinUrl: '',\n    executionId: initData.executionId,\n    campaignId: initData.campaignId,\n    criteria: initData.criteria,\n    userEmail: initData.userEmail,\n    backendUrl: initData.backendUrl,\n    backendApiKey: initData.backendApiKey,\n    serperApiKey: initData.serperApiKey,\n    groqApiKey: initData.groqApiKey,\n    updatedAt: initData.updatedAt,\n    source: initData.source,\n    existingLeads,\n    itemIndex: items.length,\n  });\n}\n\nif (items.length === 0) {\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn items.map(item => ({ json: item }));"
+        "jsCode": "// Process Serper organic results \u2014 companies-only mode (free-tier compatible).\n// HTTP: Serper Search may have run multiple times (one per query item).\n// $input.all() returns every response; we iterate and dedupe by host.\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst allResponses = $input.all();\n\nconst existingLeads = (existingLeadsResp.data || []);\n\nconst SKIP_HOSTS = [\n  'linkedin.com','twitter.com','x.com','facebook.com','instagram.com','youtube.com','tiktok.com',\n  'wikipedia.org','crunchbase.com','glassdoor.com','indeed.com','zoominfo.com','rocketreach.co',\n  'bloomberg.com','reuters.com','nytimes.com','ft.com','forbes.com','businessinsider.com','techcrunch.com',\n  'medium.com','substack.com','quora.com','yelp.com','tripadvisor.com','google.com'\n];\n\nfunction cleanCompanyName(title) {\n  if (!title) return '';\n  let name = title.split(/\\s+[-|\u2014\u2013:]\\s+/)[0].trim();\n  name = name.replace(/\\b(home|homepage|about|about us|contact|careers|jobs|login|sign in|index)\\s*$/i, '').trim();\n  return name;\n}\n\nfunction extractHost(url) {\n  if (!url) return '';\n  try { return new URL(url).hostname.replace(/^www\\./, '').toLowerCase(); }\n  catch (e) { return ''; }\n}\n\nfunction isSkipped(host) {\n  if (!host) return true;\n  for (const h of SKIP_HOSTS) {\n    if (host === h || host.endsWith('.' + h)) return true;\n  }\n  return false;\n}\n\nconst seen = new Set();\nconst items = [];\nfor (const resp of allResponses) {\n  const organic = (resp.json && resp.json.organic) || [];\n  for (let i = 0; i < organic.length; i++) {\n    const r = organic[i];\n    const host = extractHost(r.link);\n    if (isSkipped(host)) continue;\n    if (seen.has(host)) continue;\n    seen.add(host);\n    const companyName = cleanCompanyName(r.title);\n    if (!companyName || companyName.length < 2) continue;\n    items.push({\n      personName: '',\n      personTitle: '',\n      personEmail: '',\n      personPhone: '',\n      companyName: companyName,\n      domain: host,\n      website: r.link || '',\n      industry: '',\n      headcount: null,\n      fundingStage: '',\n      linkedinUrl: '',\n      executionId: initData.executionId,\n      campaignId: initData.campaignId,\n      criteria: initData.criteria,\n      userEmail: initData.userEmail,\n      backendUrl: initData.backendUrl,\n      backendApiKey: initData.backendApiKey,\n      serperApiKey: initData.serperApiKey,\n      groqApiKey: initData.groqApiKey,\n      updatedAt: initData.updatedAt,\n      source: initData.source,\n      existingLeads,\n      itemIndex: items.length,\n    });\n  }\n}\n\nif (items.length === 0) {\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn items.map(item => ({ json: item }));"
       },
       "id": "00000000-0000-0000-0000-000000000007",
       "name": "Code: Process Serper Results",
@@ -482,6 +482,19 @@
         }
       },
       "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the list of Serper queries from campaign criteria.\n// Two-pass strategy:\n//   1) for each company-name-like keyword, search for it directly\n//   2) one lookalike query using the first name as seed\n// Falls back to a single simplified general query when no company-name\n// keywords are detected.\nconst initData = $('Code: Init Execution').first().json;\nconst cr = initData.criteria || {};\nconst industries = Array.isArray(cr.industries) ? cr.industries : [];\nconst geographies = Array.isArray(cr.geographies) ? cr.geographies : [];\nconst keywordsStr = (cr.keywords || '').trim();\n\nconst tokens = keywordsStr.split(',').map(s => s.trim()).filter(Boolean);\n// Heuristic: every token must contain an uppercase letter. Catches 'Bank Frick',\n// 'VP Bank' but skips 'fintech' or 'banking'. Single-token strings still pass\n// (and get treated as a name) when capitalised.\nconst looksLikeNames = tokens.length > 0 && tokens.every(t => /[A-Z]/.test(t));\n\nconst firstIndustry = industries[0] || '';\nconst firstGeo = geographies[0] || '';\nconst firstKeyword = tokens[0] || '';\n\nconst queries = [];\nif (looksLikeNames) {\n  // Pass 1: per-name verification + domain discovery\n  for (const name of tokens) {\n    queries.push({ q: name + ' company', pass: 1, seed: name });\n  }\n  // Pass 2: lookalike. Always emitted when at least one Pass 1 query exists.\n  if (firstKeyword) {\n    const indSeg = firstIndustry ? firstIndustry + ' ' : '';\n    const geoSeg = firstGeo ? ' in ' + firstGeo : '';\n    queries.push({ q: indSeg + 'companies similar to ' + firstKeyword + geoSeg, pass: 2, seed: firstKeyword });\n  }\n} else {\n  // General fallback \u2014 a single simplified query.\n  const parts = [];\n  if (firstIndustry) parts.push(firstIndustry);\n  if (firstKeyword) parts.push(firstKeyword);\n  parts.push('companies');\n  if (firstGeo) parts.push(firstGeo);\n  queries.push({ q: parts.join(' ').trim(), pass: 0 });\n}\n\n// Each emitted item carries the full init context so HTTP: Serper Search and\n// Code: Process Serper Results can both read $('Code: Init Execution') as before\n// AND read per-item searchQuery / searchPass / searchSeed.\nreturn queries.map(q => ({ json: {\n  ...initData,\n  searchQuery: q.q,\n  searchPass: q.pass,\n  searchSeed: q.seed || null,\n} }));"
+      },
+      "id": "00000000-0000-0000-0000-00000000bsq1",
+      "name": "Code: Build Search Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        420
+      ]
     }
   ],
   "connections": {
@@ -527,7 +540,7 @@
       "main": [
         [
           {
-            "node": "HTTP: Serper Search",
+            "node": "Code: Build Search Queries",
             "type": "main",
             "index": 0
           }
@@ -692,6 +705,17 @@
         [
           {
             "node": "Gmail: Campaign Ready Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build Search Queries": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Serper Search",
             "type": "main",
             "index": 0
           }
