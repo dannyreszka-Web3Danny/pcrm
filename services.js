@@ -598,14 +598,21 @@ function applyEmailPattern(firstName,lastName,pattern,domain){
 /* All external API calls proxied through backend (set in Settings, default falls back to current tunnel) — never call Apollo, Hunter, or Clay directly from the browser. */
 function getWaterfallOrder(){try{var o=JSON.parse(localStorage.getItem("pcrm_v9_enrichment_order")||"null");if(Array.isArray(o)&&o.length>0)return o;}catch(e){}return["apollo","hunter","clay"];}
 /* enrichWaterfall(domain, firstName, lastName, backendKey, lead?) */
-/*   When `lead` is supplied AND lead.enrichment.emailPattern is not set, also fires */
-/*   one Hunter domain-search to detect the company's email pattern and returns */
-/*   { ..., emailPattern, emailPatternConfidence } in the result so the caller can */
-/*   persist it onto the lead. Skipped silently when no Hunter key, or when the */
-/*   pattern is already cached on this lead. */
+/*   When `lead` is supplied AND domain-search hasn't run yet AND the lead has fewer */
+/*   than 3 contacts, fires ONE Hunter /domain-search to (a) detect the email pattern */
+/*   and (b) return the contacts array. Result fields:                                */
+/*     emailPattern, emailPatternConfidence — pass through to lead.enrichment        */
+/*     hunterContacts                       — emails array; caller dedupes + adds    */
+/*     hunterSearched: true                 — caller persists to lead.enrichment so  */
+/*                                            we never burn a credit on the same    */
+/*                                            domain twice                           */
+/*   Skipped silently when:                                                          */
+/*     - no Hunter key configured                                                    */
+/*     - lead.enrichment.hunterSearched is already truthy                            */
+/*     - lead already has 3 or more contacts (likely manually populated)             */
 async function enrichWaterfall(domain,firstName,lastName,backendKey,lead){
   var wfOrder=getWaterfallOrder();
-  var result={email:null,name:null,title:null,source:null,companyData:null,companySource:null,emailPattern:null,emailPatternConfidence:0};
+  var result={email:null,name:null,title:null,source:null,companyData:null,companySource:null,emailPattern:null,emailPatternConfidence:0,hunterContacts:null,hunterSearched:false};
   /* Company data: Apollo first, Clay second */
   var apolloKey=localStorage.getItem("pcrm_v9_apollo_key")||"";
   var apolloOk=apolloKey&&!isEnrichLimitReached("apollo");
@@ -639,20 +646,29 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey,lead){
       }
     }
   }
-  /* One-time email-pattern detection per lead. Only runs when a lead is supplied
-     AND no pattern is cached yet. Hunter's domain-search is shallow — every
-     subsequent contact at this domain reuses the cached pattern. */
-  var alreadyHavePattern=lead&&lead.enrichment&&lead.enrichment.emailPattern;
-  if(domain&&lead&&!alreadyHavePattern){
+  /* One-time Hunter /domain-search per lead. Caller is responsible for persisting
+     hunterSearched + hunterContacts + emailPattern onto the lead so we never spend
+     a Hunter credit on the same domain twice. */
+  var contactCount=(lead&&Array.isArray(lead.contacts)&&lead.contacts.length)||0;
+  var alreadySearched=lead&&lead.enrichment&&lead.enrichment.hunterSearched;
+  if(domain&&lead&&!alreadySearched&&contactCount<3){
     var hKeyDS=localStorage.getItem("pcrm_v9_hunter_key")||"";
     if(hKeyDS){
       try{
         var dsResp=await fetch(getBackendUrl()+"/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"domain-search",domain:domain,hunterApiKey:hKeyDS,requestId:"pattern-"+(lead.id||"unknown")+"-"+Date.now(),plan:getEnrichPlan("hunter")})});
         if(dsResp.ok){
           var dsData=await dsResp.json();
-          if(dsData&&dsData.success&&dsData.pattern){
-            result.emailPattern=dsData.pattern;
-            result.emailPatternConfidence=dsData.patternConfidence||0;
+          if(dsData&&dsData.success){
+            /* Mark as searched even when no pattern/contacts come back — we still
+               burned the credit, and a re-run won't produce different results. */
+            result.hunterSearched=true;
+            if(dsData.pattern){
+              result.emailPattern=dsData.pattern;
+              result.emailPatternConfidence=dsData.patternConfidence||0;
+            }
+            if(Array.isArray(dsData.data)&&dsData.data.length>0){
+              result.hunterContacts=dsData.data;
+            }
           }
         }
       }catch(e){}
