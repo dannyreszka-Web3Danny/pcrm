@@ -509,6 +509,66 @@ async function enrichViaClay(domain,firstName,lastName,backendKey){
   }catch(e){return null;}
 }
 
+/* ── EMAIL PATTERN EXTRACTION ────────────────────────────────────────────────── */
+/* extractEmailPattern(contacts) — infer the dominant email pattern from a lead's */
+/* own contacts when at least two have verified emails at the same domain. Returns */
+/* { pattern, confidence, domain, matches, total } or null when no pattern can be  */
+/* inferred. Confidence is the share of verified contacts at the winning domain    */
+/* whose local part matches the winning pattern.                                   */
+function extractEmailPattern(contacts){
+  if(!Array.isArray(contacts)||contacts.length<2)return null;
+  var CANDIDATES=[
+    ["{first}.{last}",  function(f,l){return f+"."+l;}],
+    ["{first}_{last}",  function(f,l){return f+"_"+l;}],
+    ["{first}-{last}",  function(f,l){return f+"-"+l;}],
+    ["{first}{last}",   function(f,l){return f+l;}],
+    ["{f}.{last}",      function(f,l){return f.charAt(0)+"."+l;}],
+    ["{f}_{last}",      function(f,l){return f.charAt(0)+"_"+l;}],
+    ["{f}{last}",       function(f,l){return f.charAt(0)+l;}],
+    ["{first}.{l}",     function(f,l){return f+"."+l.charAt(0);}],
+    ["{first}{l}",      function(f,l){return f+l.charAt(0);}],
+    ["{first}",         function(f,l){return f;}],
+    ["{last}",          function(f,l){return l;}],
+  ];
+  var byDomain={};
+  contacts.forEach(function(c){
+    if(!c||!c.email||!c.name)return;
+    var status=c.email_status||c.emailStatus||"";
+    if(status!=="verified")return;
+    var at=c.email.indexOf("@");
+    if(at<=0)return;
+    var local=c.email.slice(0,at).toLowerCase();
+    var domain=c.email.slice(at+1).toLowerCase();
+    var parts=c.name.trim().split(/\s+/);
+    if(parts.length<2)return;
+    var first=parts[0].toLowerCase().replace(/[^a-z0-9'-]/g,"");
+    var last=parts.slice(1).join("").toLowerCase().replace(/[^a-z0-9'-]/g,"");
+    if(!first||!last)return;
+    if(!byDomain[domain])byDomain[domain]=[];
+    byDomain[domain].push({local:local,first:first,last:last});
+  });
+  var best=null;
+  Object.keys(byDomain).forEach(function(d){
+    var entries=byDomain[d];
+    if(entries.length<2)return;
+    var counts={};
+    entries.forEach(function(e){
+      for(var i=0;i<CANDIDATES.length;i++){
+        if(CANDIDATES[i][1](e.first,e.last)===e.local){
+          counts[CANDIDATES[i][0]]=(counts[CANDIDATES[i][0]]||0)+1;
+          break;
+        }
+      }
+    });
+    var winner=null,wc=0;
+    Object.keys(counts).forEach(function(p){if(counts[p]>wc){wc=counts[p];winner=p;}});
+    if(winner&&wc>=2&&(!best||wc>best.matches)){
+      best={pattern:winner,confidence:Math.round(wc/entries.length*100),domain:d,matches:wc,total:entries.length};
+    }
+  });
+  return best;
+}
+
 /* ── EMAIL PATTERN PREDICTION ────────────────────────────────────────────────── */
 /* applyEmailPattern("Patrick","Collison","{first}.{last}","stripe.com")  */
 /*   → "patrick.collison@stripe.com"                                       */
