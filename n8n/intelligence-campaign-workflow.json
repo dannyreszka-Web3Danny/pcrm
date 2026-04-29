@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Init: generate stable executionId, extract webhook payload\nconst webhookBody = $input.first().json.body || $input.first().json;\nconst campaignId = webhookBody.campaignId || '';\nconst criteria = webhookBody.criteria || {};\nconst userEmail = webhookBody.userEmail || 'danny.reszka@gmail.com';\n\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n    const r = Math.random() * 16 | 0;\n    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);\n  });\n}\n\n// One stable ID per workflow execution \u2014 reused on retries\nconst executionId = ($execution && $execution.id) ? $execution.id.replace(/-/g, '').slice(0, 32) : uuidv4();\nconst backendUrl = webhookBody.backendUrl || '';\nconst backendApiKey = webhookBody.backendApiKey || '';\nconst apolloApiKey = webhookBody.apolloApiKey || '';\nconst serperApiKey = webhookBody.serperApiKey || '';\nconst groqApiKey = webhookBody.groqApiKey || '';\n\nreturn [{ json: {\n  executionId,\n  campaignId,\n  criteria,\n  userEmail,\n  backendUrl,\n  backendApiKey,\n  apolloApiKey,\n  serperApiKey,\n  groqApiKey,\n  updatedAt: new Date().toISOString(),\n  source: 'n8n',\n} }];"
+        "jsCode": "// Init: generate stable executionId, extract webhook payload\nconst webhookBody = $input.first().json.body || $input.first().json;\nconst campaignId = webhookBody.campaignId || '';\nconst criteria = webhookBody.criteria || {};\nconst userEmail = webhookBody.userEmail || 'danny.reszka@gmail.com';\n\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n    const r = Math.random() * 16 | 0;\n    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);\n  });\n}\n\n// One stable ID per workflow execution \u2014 reused on retries\nconst executionId = ($execution && $execution.id) ? $execution.id.replace(/-/g, '').slice(0, 32) : uuidv4();\nconst backendUrl = webhookBody.backendUrl || '';\nconst backendApiKey = webhookBody.backendApiKey || '';\nconst serperApiKey = webhookBody.serperApiKey || '';\nconst groqApiKey = webhookBody.groqApiKey || '';\n\nreturn [{ json: {\n  executionId,\n  campaignId,\n  criteria,\n  userEmail,\n  backendUrl,\n  backendApiKey,\n  serperApiKey,\n  groqApiKey,\n  updatedAt: new Date().toISOString(),\n  source: 'n8n',\n} }];"
       },
       "id": "00000000-0000-0000-0000-000000000003",
       "name": "Code: Init Execution",
@@ -107,7 +107,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.apollo.io/v1/mixed_companies/search",
+        "url": "https://google.serper.dev/search",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -116,15 +116,15 @@
               "value": "application/json"
             },
             {
-              "name": "X-Api-Key",
-              "value": "={{ $('Code: Init Execution').first().json.apolloApiKey }}"
+              "name": "X-API-KEY",
+              "value": "={{ $('Code: Init Execution').first().json.serperApiKey }}"
             }
           ]
         },
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const kwParts = [].concat(Array.isArray(cr.industries) ? cr.industries : [], cr.keywords ? [cr.keywords] : []); return JSON.stringify({ page: 1, per_page: 25, organization_locations: cr.geographies || [], q_organization_industry_tag_ids: cr.apolloIndustryIds || [], q_keywords: kwParts.join(' ') }); })() }}",
+        "jsonBody": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const parts = []; if (Array.isArray(cr.industries)) for (const x of cr.industries) parts.push(x); if (Array.isArray(cr.geographies)) for (const x of cr.geographies) parts.push(x); if (cr.keywords) parts.push(cr.keywords); const q = parts.join(' ').trim() + ' companies'; return JSON.stringify({ q: q, num: 25 }); })() }}",
         "options": {
           "response": {
             "response": {
@@ -134,7 +134,7 @@
         }
       },
       "id": "00000000-0000-0000-0000-000000000006",
-      "name": "HTTP: Apollo Search",
+      "name": "HTTP: Serper Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
@@ -144,10 +144,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Process Apollo results \u2014 companies-only mode (free-tier compatible)\n// Replaces former /v1/mixed_people/search \u2192 /v1/mixed_companies/search.\n// Output items carry company fields only; personName/Title/Email/Phone\n// intentionally empty for Hunter/Clay to fill downstream.\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst apolloData = $input.first().json;\n\nconst existingLeads = (existingLeadsResp.data || []);\nconst organizations = apolloData.organizations || apolloData.accounts || [];\n\nif (organizations.length === 0) {\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn organizations.map((org, idx) => {\n  const rawSite = org.website_url || org.primary_domain || '';\n  const domain = rawSite.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].toLowerCase();\n\n  return { json: {\n    // Contact fields intentionally empty \u2014 populated downstream by Hunter/Clay\n    personName: '',\n    personTitle: '',\n    personEmail: '',\n    personPhone: '',\n    // Company fields from the Apollo organization record\n    companyName: org.name || '',\n    domain,\n    website: rawSite,\n    industry: org.industry || '',\n    headcount: org.estimated_num_employees || org.num_employees || null,\n    fundingStage: org.funding_stage || '',\n    linkedinUrl: org.linkedin_url || '',\n    // Propagate context\n    executionId: initData.executionId,\n    campaignId: initData.campaignId,\n    criteria: initData.criteria,\n    userEmail: initData.userEmail,\n    backendUrl: initData.backendUrl,\n    backendApiKey: initData.backendApiKey,\n    serperApiKey: initData.serperApiKey,\n    groqApiKey: initData.groqApiKey,\n    updatedAt: initData.updatedAt,\n    source: initData.source,\n    existingLeads,\n    itemIndex: idx,\n  } };\n});"
+        "jsCode": "// Process Serper organic results \u2014 normalise into per-company items.\n// Output items keep the same shape downstream nodes expect; contact\n// fields stay empty since Serper returns websites, not people \u2014\n// Hunter/Clay fill them in later when given a domain.\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst serperData = $input.first().json;\n\nconst existingLeads = (existingLeadsResp.data || []);\nconst organic = serperData.organic || [];\n\nconst SKIP_HOSTS = [\n  'linkedin.com','twitter.com','x.com','facebook.com','instagram.com','youtube.com','tiktok.com',\n  'wikipedia.org','crunchbase.com','glassdoor.com','indeed.com','zoominfo.com','rocketreach.co',\n  'bloomberg.com','reuters.com','nytimes.com','ft.com','forbes.com','businessinsider.com','techcrunch.com',\n  'medium.com','substack.com','quora.com','yelp.com','tripadvisor.com','google.com','youtube.com'\n];\n\nfunction cleanCompanyName(title) {\n  if (!title) return '';\n  let name = title.split(/\\s+[-|\u2014\u2013:]\\s+/)[0].trim();\n  name = name.replace(/\\b(home|homepage|about|about us|contact|careers|jobs|login|sign in|index)\\s*$/i, '').trim();\n  return name;\n}\n\nfunction extractHost(url) {\n  if (!url) return '';\n  try { return new URL(url).hostname.replace(/^www\\./, '').toLowerCase(); }\n  catch (e) { return ''; }\n}\n\nfunction isSkipped(host) {\n  if (!host) return true;\n  for (const h of SKIP_HOSTS) {\n    if (host === h || host.endsWith('.' + h)) return true;\n  }\n  return false;\n}\n\nconst seen = new Set();\nconst items = [];\nfor (let i = 0; i < organic.length; i++) {\n  const r = organic[i];\n  const host = extractHost(r.link);\n  if (isSkipped(host)) continue;\n  if (seen.has(host)) continue;\n  seen.add(host);\n  const companyName = cleanCompanyName(r.title);\n  if (!companyName || companyName.length < 2) continue;\n  items.push({\n    personName: '',\n    personTitle: '',\n    personEmail: '',\n    personPhone: '',\n    companyName: companyName,\n    domain: host,\n    website: r.link || '',\n    industry: '',\n    headcount: null,\n    fundingStage: '',\n    linkedinUrl: '',\n    executionId: initData.executionId,\n    campaignId: initData.campaignId,\n    criteria: initData.criteria,\n    userEmail: initData.userEmail,\n    backendUrl: initData.backendUrl,\n    backendApiKey: initData.backendApiKey,\n    serperApiKey: initData.serperApiKey,\n    groqApiKey: initData.groqApiKey,\n    updatedAt: initData.updatedAt,\n    source: initData.source,\n    existingLeads,\n    itemIndex: items.length,\n  });\n}\n\nif (items.length === 0) {\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn items.map(item => ({ json: item }));"
       },
       "id": "00000000-0000-0000-0000-000000000007",
-      "name": "Code: Process Apollo Results",
+      "name": "Code: Process Serper Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -304,7 +304,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [], enrichment: { apolloScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'apollo_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [], enrichment: { aiScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'serper_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000013",
@@ -527,25 +527,25 @@
       "main": [
         [
           {
-            "node": "HTTP: Apollo Search",
+            "node": "HTTP: Serper Search",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "HTTP: Apollo Search": {
+    "HTTP: Serper Search": {
       "main": [
         [
           {
-            "node": "Code: Process Apollo Results",
+            "node": "Code: Process Serper Results",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code: Process Apollo Results": {
+    "Code: Process Serper Results": {
       "main": [
         [
           {
