@@ -39,6 +39,9 @@ app.use(function requireApiKey(req, res, next) {
   if (!key || key !== API_SECRET) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
+  // Strip the auth fallback so it can't leak into persisted state via routes that
+  // capture extra body fields with `...rest`.
+  if (req.body && 'backendApiKey' in req.body) delete req.body.backendApiKey;
   next();
 });
 
