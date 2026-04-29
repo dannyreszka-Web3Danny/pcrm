@@ -67,7 +67,7 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $json.executionId + '-init', status: 'running', step: 'research', updatedAt: $json.updatedAt, source: 'n8n', payloadType: 'campaign_update' }) }}",
+        "body": "={{ JSON.stringify({ requestId: $execution.id + '-init', status: 'running', step: 'research', updatedAt: $json.updatedAt, source: 'n8n', payloadType: 'campaign_update' }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000004",
@@ -241,7 +241,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse Claude score, check qualifying, check duplicate\nconst lead = $('Loop: Per Lead').item.json;\nconst claudeResp = $input.first().json;\n\n// Parse score from Claude response\nlet score = 0;\nlet reasoning = '';\ntry {\n  const text = (claudeResp.content && claudeResp.content[0]) ? claudeResp.content[0].text : '';\n  reasoning = text.slice(0, 200);\n  const m = text.match(/Score:\\s*(\\d+(?:\\.\\d+)?)/i) ||\n             text.match(/(\\d+(?:\\.\\d+)?)\\s*\\/\\s*10/i) ||\n             text.match(/\\b(10|[1-9])\\b/);\n  if (m) score = parseFloat(m[1]);\n} catch (e) {\n  reasoning = 'parse-error: ' + e.message;\n}\n\nconst QUALIFY_THRESHOLD = 6;\nconst isQualifying = score >= QUALIFY_THRESHOLD;\n\n// Duplicate check: match by domain then by company name\nconst existingLeads = lead.existingLeads || [];\nconst domain = (lead.domain || '').toLowerCase();\nconst companyName = (lead.companyName || '').toLowerCase().trim();\nlet isDuplicate = false;\nlet existingLeadId = null;\n\nif (domain) {\n  const match = existingLeads.find(l => {\n    const ld = ((l.website || l.domain || '')\n      .replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0]).toLowerCase();\n    return ld && ld === domain;\n  });\n  if (match) { isDuplicate = true; existingLeadId = match.id; }\n}\nif (!isDuplicate && companyName) {\n  const match = existingLeads.find(l =>\n    (l.company || l.name || '').toLowerCase().trim() === companyName\n  );\n  if (match) { isDuplicate = true; existingLeadId = match.id; }\n}\n\n// Per-lead requestId: stable per execution + lead index\nconst leadRequestId = lead.executionId + '-lead-' + lead.itemIndex;\n\nreturn [{ json: {\n  ...lead,\n  score,\n  reasoning,\n  isQualifying,\n  isDuplicate,\n  existingLeadId,\n  leadRequestId,\n  // Create new lead only when qualifying AND not a duplicate\n  shouldCreate: isQualifying && !isDuplicate,\n  // Link existing lead only when qualifying AND is a duplicate\n  shouldLink: isQualifying && isDuplicate,\n} }];"
+        "jsCode": "// Parse Claude score, check qualifying, check duplicate\nconst lead = $('Loop: Per Lead').item.json;\nconst claudeResp = $input.first().json;\n\n// Parse score from Claude response\nlet score = 0;\nlet reasoning = '';\ntry {\n  const text = (claudeResp.content && claudeResp.content[0]) ? claudeResp.content[0].text : '';\n  reasoning = text.slice(0, 200);\n  const m = text.match(/Score:\\s*(\\d+(?:\\.\\d+)?)/i) ||\n             text.match(/(\\d+(?:\\.\\d+)?)\\s*\\/\\s*10/i) ||\n             text.match(/\\b(10|[1-9])\\b/);\n  if (m) score = parseFloat(m[1]);\n} catch (e) {\n  reasoning = 'parse-error: ' + e.message;\n}\n\nconst QUALIFY_THRESHOLD = 6;\nconst isQualifying = score >= QUALIFY_THRESHOLD;\n\n// Duplicate check: match by domain then by company name\nconst existingLeads = lead.existingLeads || [];\nconst domain = (lead.domain || '').toLowerCase();\nconst companyName = (lead.companyName || '').toLowerCase().trim();\nlet isDuplicate = false;\nlet existingLeadId = null;\n\nif (domain) {\n  const match = existingLeads.find(l => {\n    const ld = ((l.website || l.domain || '')\n      .replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0]).toLowerCase();\n    return ld && ld === domain;\n  });\n  if (match) { isDuplicate = true; existingLeadId = match.id; }\n}\nif (!isDuplicate && companyName) {\n  const match = existingLeads.find(l =>\n    (l.company || l.name || '').toLowerCase().trim() === companyName\n  );\n  if (match) { isDuplicate = true; existingLeadId = match.id; }\n}\n\n// Per-lead requestId: stable per execution + lead index\nconst leadRequestId = $execution.id + '-lead-' + lead.itemIndex;\n\nreturn [{ json: {\n  ...lead,\n  score,\n  reasoning,\n  isQualifying,\n  isDuplicate,\n  existingLeadId,\n  leadRequestId,\n  // Create new lead only when qualifying AND not a duplicate\n  shouldCreate: isQualifying && !isDuplicate,\n  // Link existing lead only when qualifying AND is a duplicate\n  shouldLink: isQualifying && isDuplicate,\n} }];"
       },
       "id": "00000000-0000-0000-0000-000000000011",
       "name": "Code: Parse Score & Qualify",
@@ -412,7 +412,7 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $('Code: Init Execution').first().json.executionId + '-enrichment', payloadType: 'campaign_update', source: 'n8n', status: 'running', step: 'enrichment', updatedAt: new Date().toISOString() }) }}",
+        "body": "={{ JSON.stringify({ requestId: $execution.id + '-enrichment', payloadType: 'campaign_update', source: 'n8n', status: 'running', step: 'enrichment', updatedAt: new Date().toISOString() }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000016",
@@ -443,7 +443,7 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ requestId: $('Code: Init Execution').first().json.executionId + '-complete', payloadType: 'campaign_update', source: 'n8n', status: 'completed', step: 'ready_for_review', updatedAt: new Date().toISOString() }) }}",
+        "body": "={{ JSON.stringify({ requestId: $execution.id + '-complete', payloadType: 'campaign_update', source: 'n8n', status: 'completed', step: 'ready_for_review', updatedAt: new Date().toISOString() }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000017",
