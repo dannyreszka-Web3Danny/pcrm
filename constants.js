@@ -1,5 +1,5 @@
 /* ── VERSION ─────────────────────────────────────────────────────────────────── */
-const VERSION = '04.27.154a';
+const VERSION = '04.29.155a';
 
 /* ── SUPABASE CONFIG ─────────────────────────────────────────────────────────── */
 /* Replace these placeholder values with your actual Supabase project credentials */
