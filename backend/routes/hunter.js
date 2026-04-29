@@ -50,7 +50,9 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: data.errors[0].details || 'Hunter.io error' });
     }
 
-    const contacts = (data.data?.emails || []).slice(0, domainLimit).map(e => ({
+    const hunterData = data.data || {};
+    const emails = hunterData.emails || [];
+    const contacts = emails.slice(0, domainLimit).map(e => ({
       firstName: e.first_name || '',
       lastName: e.last_name || '',
       email: e.value || '',
@@ -59,7 +61,17 @@ router.post('/', async (req, res) => {
       status: e.type || 'unverified',
     }));
 
-    res.json({ success: true, data: contacts });
+    // Pattern + confidence: additive fields. Hunter returns a `pattern` string like
+    // "{first}.{last}" when it has detected a deterministic format; we estimate
+    // confidence as the mean of the per-email confidences observed.
+    const pattern = hunterData.pattern || null;
+    let patternConfidence = 0;
+    if (pattern && emails.length > 0) {
+      const sum = emails.reduce((s, e) => s + (typeof e.confidence === 'number' ? e.confidence : 0), 0);
+      patternConfidence = Math.round(sum / emails.length);
+    }
+
+    res.json({ success: true, data: contacts, pattern, patternConfidence });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
