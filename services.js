@@ -509,13 +509,43 @@ async function enrichViaClay(domain,firstName,lastName,backendKey){
   }catch(e){return null;}
 }
 
+/* ── EMAIL PATTERN PREDICTION ────────────────────────────────────────────────── */
+/* applyEmailPattern("Patrick","Collison","{first}.{last}","stripe.com")  */
+/*   → "patrick.collison@stripe.com"                                       */
+/* Returns null when name parts or pattern can't produce a clean email.    */
+function applyEmailPattern(firstName,lastName,pattern,domain){
+  if(!pattern||!domain)return null;
+  var fn=(firstName||"").trim().toLowerCase().replace(/[^a-z0-9'-]/g,"");
+  var ln=(lastName||"").trim().toLowerCase().replace(/[^a-z0-9'-]/g,"");
+  if(!fn&&!ln)return null;
+  var local=pattern
+    .replace(/\{first\}/g,fn)
+    .replace(/\{last\}/g,ln)
+    .replace(/\{f\}/g,fn.slice(0,1))
+    .replace(/\{l\}/g,ln.slice(0,1))
+    .replace(/\{firstname\}/g,fn)
+    .replace(/\{lastname\}/g,ln);
+  /* If any unsubstituted placeholder is left, bail. */
+  if(/\{[a-z_]+\}/i.test(local))return null;
+  /* Strip any stray non-email chars; collapse repeated dots. */
+  local=local.replace(/[^a-z0-9._+-]/g,"").replace(/\.+/g,".").replace(/^\.|\.$/g,"");
+  if(!local)return null;
+  return local+"@"+domain.replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0].toLowerCase();
+}
+
 /* ── STEP 20C2: ENRICHMENT WATERFALL ─────────────────────────────────────────── */
 /* Waterfall: Apollo → Clay (company data); Apollo → Hunter → Clay (email) */
 /* All external API calls proxied through backend (set in Settings, default falls back to current tunnel) — never call Apollo, Hunter, or Clay directly from the browser. */
 function getWaterfallOrder(){try{var o=JSON.parse(localStorage.getItem("pcrm_v9_enrichment_order")||"null");if(Array.isArray(o)&&o.length>0)return o;}catch(e){}return["apollo","hunter","clay"];}
-async function enrichWaterfall(domain,firstName,lastName,backendKey){
+/* enrichWaterfall(domain, firstName, lastName, backendKey, lead?) */
+/*   When `lead` is supplied AND lead.enrichment.emailPattern is not set, also fires */
+/*   one Hunter domain-search to detect the company's email pattern and returns */
+/*   { ..., emailPattern, emailPatternConfidence } in the result so the caller can */
+/*   persist it onto the lead. Skipped silently when no Hunter key, or when the */
+/*   pattern is already cached on this lead. */
+async function enrichWaterfall(domain,firstName,lastName,backendKey,lead){
   var wfOrder=getWaterfallOrder();
-  var result={email:null,name:null,title:null,source:null,companyData:null,companySource:null};
+  var result={email:null,name:null,title:null,source:null,companyData:null,companySource:null,emailPattern:null,emailPatternConfidence:0};
   /* Company data: Apollo first, Clay second */
   var apolloKey=localStorage.getItem("pcrm_v9_apollo_key")||"";
   var apolloOk=apolloKey&&!isEnrichLimitReached("apollo");
@@ -547,6 +577,25 @@ async function enrichWaterfall(domain,firstName,lastName,backendKey){
         var clayEmail=await enrichViaClay(domain,firstName,lastName,backendKey);
         if(clayEmail&&clayEmail.email){result.email=clayEmail.email;result.name=result.name||clayEmail.name||null;result.title=result.title||clayEmail.title||null;result.source="clay";}
       }
+    }
+  }
+  /* One-time email-pattern detection per lead. Only runs when a lead is supplied
+     AND no pattern is cached yet. Hunter's domain-search is shallow — every
+     subsequent contact at this domain reuses the cached pattern. */
+  var alreadyHavePattern=lead&&lead.enrichment&&lead.enrichment.emailPattern;
+  if(domain&&lead&&!alreadyHavePattern){
+    var hKeyDS=localStorage.getItem("pcrm_v9_hunter_key")||"";
+    if(hKeyDS){
+      try{
+        var dsResp=await fetch(getBackendUrl()+"/hunter",{method:"POST",headers:{"Content-Type":"application/json","x-pcrm-key":backendKey||""},body:JSON.stringify({type:"domain-search",domain:domain,hunterApiKey:hKeyDS,requestId:"pattern-"+(lead.id||"unknown")+"-"+Date.now(),plan:getEnrichPlan("hunter")})});
+        if(dsResp.ok){
+          var dsData=await dsResp.json();
+          if(dsData&&dsData.success&&dsData.pattern){
+            result.emailPattern=dsData.pattern;
+            result.emailPatternConfidence=dsData.patternConfidence||0;
+          }
+        }
+      }catch(e){}
     }
   }
   return result;
