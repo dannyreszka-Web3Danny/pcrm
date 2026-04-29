@@ -107,7 +107,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.apollo.io/v1/mixed_people/search",
+        "url": "https://api.apollo.io/v1/mixed_companies/search",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -124,7 +124,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const kwParts = [].concat(Array.isArray(cr.industries) ? cr.industries : [], cr.keywords ? [cr.keywords] : []); return JSON.stringify({ page: 1, per_page: 25, person_titles: cr.jobTitles || [], person_locations: cr.geographies || [], q_organization_industry_tag_ids: cr.apolloIndustryIds || [], q_keywords: kwParts.join(' '), prospected_by_current_team: ['no'] }); })() }}",
+        "jsonBody": "={{ (function() { const cr = $('Code: Init Execution').first().json.criteria || {}; const kwParts = [].concat(Array.isArray(cr.industries) ? cr.industries : [], cr.keywords ? [cr.keywords] : []); return JSON.stringify({ page: 1, per_page: 25, organization_locations: cr.geographies || [], q_organization_industry_tag_ids: cr.apolloIndustryIds || [], q_keywords: kwParts.join(' ') }); })() }}",
         "options": {
           "response": {
             "response": {
@@ -144,7 +144,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Process Apollo results \u2014 normalise into per-company items\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst apolloData = $input.first().json;\n\nconst existingLeads = (existingLeadsResp.data || []);\nconst people = apolloData.people || apolloData.results || [];\n\nif (people.length === 0) {\n  // No Apollo results \u2014 mark campaign failed\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn people.map((p, idx) => {\n  const org = p.organization || {};\n  const rawSite = org.website_url || org.primary_domain || '';\n  const domain = rawSite.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].toLowerCase();\n\n  return { json: {\n    personName: p.name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),\n    personTitle: p.title || '',\n    personEmail: p.email || '',\n    personPhone: (p.phone_numbers && p.phone_numbers[0]) ? p.phone_numbers[0].raw_number : '',\n    companyName: org.name || '',\n    domain,\n    website: rawSite,\n    industry: org.industry || '',\n    headcount: org.num_employees || null,\n    fundingStage: org.funding_stage || '',\n    linkedinUrl: org.linkedin_url || p.linkedin_url || '',\n    // Propagate context\n    executionId: initData.executionId,\n    campaignId: initData.campaignId,\n    criteria: initData.criteria,\n    userEmail: initData.userEmail,\n    backendUrl: initData.backendUrl,\n    backendApiKey: initData.backendApiKey,\n    serperApiKey: initData.serperApiKey,\n    groqApiKey: initData.groqApiKey,\n    updatedAt: initData.updatedAt,\n    source: initData.source,\n    existingLeads,\n    itemIndex: idx,\n  } };\n});"
+        "jsCode": "// Process Apollo results \u2014 companies-only mode (free-tier compatible)\n// Replaces former /v1/mixed_people/search \u2192 /v1/mixed_companies/search.\n// Output items carry company fields only; personName/Title/Email/Phone\n// intentionally empty for Hunter/Clay to fill downstream.\nconst initData = $('Code: Init Execution').first().json;\nconst existingLeadsResp = $('HTTP: GET Existing Leads').first().json;\nconst apolloData = $input.first().json;\n\nconst existingLeads = (existingLeadsResp.data || []);\nconst organizations = apolloData.organizations || apolloData.accounts || [];\n\nif (organizations.length === 0) {\n  return [{ json: {\n    ...initData,\n    existingLeads,\n    noResults: true,\n    companyName: '__NO_RESULTS__',\n    itemIndex: 0,\n  } }];\n}\n\nreturn organizations.map((org, idx) => {\n  const rawSite = org.website_url || org.primary_domain || '';\n  const domain = rawSite.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].toLowerCase();\n\n  return { json: {\n    // Contact fields intentionally empty \u2014 populated downstream by Hunter/Clay\n    personName: '',\n    personTitle: '',\n    personEmail: '',\n    personPhone: '',\n    // Company fields from the Apollo organization record\n    companyName: org.name || '',\n    domain,\n    website: rawSite,\n    industry: org.industry || '',\n    headcount: org.estimated_num_employees || org.num_employees || null,\n    fundingStage: org.funding_stage || '',\n    linkedinUrl: org.linkedin_url || '',\n    // Propagate context\n    executionId: initData.executionId,\n    campaignId: initData.campaignId,\n    criteria: initData.criteria,\n    userEmail: initData.userEmail,\n    backendUrl: initData.backendUrl,\n    backendApiKey: initData.backendApiKey,\n    serperApiKey: initData.serperApiKey,\n    groqApiKey: initData.groqApiKey,\n    updatedAt: initData.updatedAt,\n    source: initData.source,\n    existingLeads,\n    itemIndex: idx,\n  } };\n});"
       },
       "id": "00000000-0000-0000-0000-000000000007",
       "name": "Code: Process Apollo Results",
@@ -304,7 +304,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [{ name: $json.personName, title: $json.personTitle, email: $json.personEmail, phone: $json.personPhone, source: 'apollo' }], enrichment: { apolloScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'apollo_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ requestId: $json.leadRequestId, payloadType: 'lead_create', source: 'n8n', updatedAt: new Date().toISOString(), campaignId: $json.campaignId, name: $json.personName || $json.companyName, company: $json.companyName, website: $json.website, domain: $json.domain, industry: $json.industry, headcount: $json.headcount, fundingStage: $json.fundingStage, linkedinUrl: $json.linkedinUrl, contacts: [], enrichment: { apolloScore: $json.score, claudeReasoning: $json.reasoning, enrichedAt: new Date().toISOString() }, signals: [{ type: 'apollo_discovery', value: 'Found via Intelligence Campaign', strength: 'medium', at: new Date().toISOString() }] }) }}",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000013",
