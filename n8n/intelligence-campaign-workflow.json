@@ -51,7 +51,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $json.backendUrl }}/campaigns/={{ $json.campaignId }}",
+        "url": "={{ $json.backendUrl }}/campaigns/{{ $json.campaignId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -350,7 +350,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $json.backendUrl }}/leads/={{ $json.existingLeadId }}",
+        "url": "={{ $json.backendUrl }}/leads/{{ $json.existingLeadId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -396,7 +396,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/={{ $('Code: Init Execution').first().json.campaignId }}",
+        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/{{ $('Code: Init Execution').first().json.campaignId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -427,7 +427,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/={{ $('Code: Init Execution').first().json.campaignId }}",
+        "url": "={{ $('Code: Init Execution').first().json.backendUrl }}/campaigns/{{ $('Code: Init Execution').first().json.campaignId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
