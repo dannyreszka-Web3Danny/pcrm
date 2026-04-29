@@ -476,7 +476,8 @@
           "id": "CONFIGURE_GMAIL_CREDENTIAL_ID",
           "name": "PCRM Gmail Account"
         }
-      }
+      },
+      "disabled": true
     }
   ],
   "connections": {
