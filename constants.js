@@ -895,6 +895,14 @@ function serializeActivePrompt(leads, sequences) {
       s4+=" opener:"+(latest.bestOpenerPattern||"n/a")+" signal:"+(latest.bestSignalType||"n/a");
     } else { s4+=" not enough data yet"; }
   } catch(_){ s4+=" not enough data yet"; }
+  // Email-pattern predictability: how many leads have a Hunter-derived or
+  // contact-extracted pattern with confidence >= 70%, so the AI knows where
+  // it can safely predict an email for a newly-named contact.
+  var emailPredictCount = (leads||[]).filter(function(l){
+    var en = l && l.enrichment;
+    return en && en.emailPattern && (en.emailPatternConfidence||0) >= 70;
+  }).length;
+  if(emailPredictCount>0) s4+=" email_predict:"+emailPredictCount;
 
   // Section 5: top 5 leads by totalScore
   var sorted = (leads||[]).slice().sort(function(a,b){return (b.totalScore||0)-(a.totalScore||0);});
